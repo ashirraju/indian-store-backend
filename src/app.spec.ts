@@ -526,5 +526,117 @@ describe('Indian Store Backend API Suite', () => {
       expect(getProd.body.data.stock).toBe(50);
     });
   });
+
+  describe('Storefront & Promotional Banners API Suite', () => {
+    let createdBannerId = '';
+
+    it('GET /api/v1/storefront - returns aggregate storefront with announcement and hero banners', async () => {
+      const res = await request(app).get('/api/v1/storefront');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.store).toBeDefined();
+      expect(res.body.data.store.storeName).toBe('Indian Store');
+      expect(res.body.data.announcement).toBeDefined();
+      expect(typeof res.body.data.announcement.text).toBe('string');
+      expect(res.body.data.announcement.text.length).toBeGreaterThan(0);
+      expect(Array.isArray(res.body.data.banners)).toBe(true);
+      expect(res.body.data.banners.length).toBeGreaterThanOrEqual(1);
+      expect(Array.isArray(res.body.data.featuredCategories)).toBe(true);
+    });
+
+    it('GET /api/v1/storefront/banner-config - returns top announcement config for Angular navbar', async () => {
+      const res = await request(app).get('/api/v1/storefront/banner-config');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.announcementText).toBeDefined();
+      expect(typeof res.body.data.isAnnouncementActive).toBe('boolean');
+    });
+
+    it('PUT /api/v1/storefront/config - admin updates announcement text & link', async () => {
+      const res = await request(app)
+        .put('/api/v1/storefront/config')
+        .set('x-mock-role', 'Admin')
+        .send({
+          announcementText: '🔥 Weekend Super Saver: 20% OFF on all Desi Spices!',
+          announcementLink: '/deals',
+          isAnnouncementActive: true,
+          freeShippingThreshold: 799,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.announcementText).toBe('🔥 Weekend Super Saver: 20% OFF on all Desi Spices!');
+      expect(res.body.data.announcementLink).toBe('/deals');
+      expect(res.body.data.freeShippingThreshold).toBe(799);
+    });
+
+    it('GET /api/v1/storefront/banners - lists active promotional hero banners', async () => {
+      const res = await request(app).get('/api/v1/storefront/banners');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.length).toBeGreaterThanOrEqual(1);
+      expect(res.body.data[0].title).toBeDefined();
+      expect(res.body.data[0].imageUrl).toBeDefined();
+    });
+
+    it('POST /api/v1/storefront/banners - admin creates new promotional banner', async () => {
+      const res = await request(app)
+        .post('/api/v1/storefront/banners')
+        .set('x-mock-role', 'Admin')
+        .send({
+          title: 'Special Diwali Sweet Hampers ' + Date.now(),
+          subtitle: 'Artisanal Kaju Katli, Motichoor Ladoos & Premium Dry Fruits',
+          badge: 'DIWALI SPECIAL',
+          imageUrl: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d',
+          ctaText: 'Pre-Order Now',
+          ctaLink: '/products?category=Chips%20%26%20biscuits',
+          displayOrder: 10,
+          isActive: true,
+          placement: 'HERO',
+          bgGradient: 'from-amber-600 to-orange-800',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.title).toContain('Special Diwali Sweet Hampers');
+      createdBannerId = res.body.data.id;
+    });
+
+    it('PUT /api/v1/storefront/banners/:id - admin updates banner title and cta text', async () => {
+      const res = await request(app)
+        .put(`/api/v1/storefront/banners/${createdBannerId}`)
+        .set('x-mock-role', 'Admin')
+        .send({
+          title: 'Diwali Hampers (Updated Edition)',
+          ctaText: 'Shop Gifts',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.title).toBe('Diwali Hampers (Updated Edition)');
+      expect(res.body.data.ctaText).toBe('Shop Gifts');
+    });
+
+    it('PATCH /api/v1/storefront/banners/:id/toggle - admin toggles banner active status', async () => {
+      const res = await request(app)
+        .patch(`/api/v1/storefront/banners/${createdBannerId}/toggle`)
+        .set('x-mock-role', 'Admin')
+        .send({ isActive: false });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.isActive).toBe(false);
+    });
+
+    it('DELETE /api/v1/storefront/banners/:id - admin deletes promotional banner', async () => {
+      const res = await request(app)
+        .delete(`/api/v1/storefront/banners/${createdBannerId}`)
+        .set('x-mock-role', 'Admin');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.deletedBannerId).toBe(createdBannerId);
+    });
+  });
 });
 

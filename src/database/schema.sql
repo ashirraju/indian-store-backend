@@ -185,3 +185,41 @@ CREATE TABLE IF NOT EXISTS notification_logs (
     provider_response JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 13. STOREFRONT CONFIGURATION (Top Announcement Bar, Store Info & Policy)
+CREATE TABLE IF NOT EXISTS storefront_config (
+    id VARCHAR(50) PRIMARY KEY DEFAULT 'default',
+    store_name VARCHAR(255) NOT NULL DEFAULT 'Indian Store',
+    tagline VARCHAR(255) DEFAULT 'Authentic Indian Groceries & Essentials Delivered Fast',
+    announcement_text TEXT DEFAULT '🎉 Grand Festive Sale: Flat 15% OFF on all Authentic Groceries! Use Code FESTIVE15',
+    announcement_link VARCHAR(255) DEFAULT '/offers',
+    is_announcement_active BOOLEAN DEFAULT TRUE,
+    free_shipping_threshold NUMERIC(10, 2) DEFAULT 999.00,
+    support_phone VARCHAR(50) DEFAULT '+91 98765 43210',
+    support_email VARCHAR(255) DEFAULT 'support@indianstore.com',
+    delivery_sla VARCHAR(100) DEFAULT 'Fast 2-Hour Express Delivery',
+    currency_symbol VARCHAR(10) DEFAULT '₹',
+    currency_code VARCHAR(10) DEFAULT 'INR',
+    metadata JSONB DEFAULT '{}',
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 14. PROMOTIONAL BANNERS (Hero Carousels, Seasonal Promos & Section Cards)
+CREATE TABLE IF NOT EXISTS promotional_banners (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title VARCHAR(255) NOT NULL,
+    subtitle TEXT,
+    badge VARCHAR(100),
+    image_url TEXT NOT NULL,
+    cta_text VARCHAR(100) DEFAULT 'Explore Deals',
+    cta_link VARCHAR(255) DEFAULT '/products',
+    display_order INT DEFAULT 0,
+    is_active BOOLEAN DEFAULT TRUE,
+    placement VARCHAR(50) DEFAULT 'HERO', -- 'HERO', 'MIDDLE', 'POPUP', 'SIDEBAR'
+    bg_gradient VARCHAR(100) DEFAULT 'from-amber-600 to-orange-700',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_banners_active_order ON promotional_banners(is_active, display_order);
+

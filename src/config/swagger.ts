@@ -26,6 +26,7 @@ export const swaggerDocument = {
   ],
   tags: [
     { name: 'Health', description: 'System health & liveness checks' },
+    { name: 'Storefront', description: 'Homepage aggregates, top announcement bar & promotional hero banners' },
     { name: 'Categories', description: 'Admin & Catalog Category and Sub-Category hierarchy management' },
     { name: 'Products', description: 'Catalog browsing, search, and product management' },
     { name: 'Inventory', description: 'Warehouse stock levels, atomic adjustments & audit logs' },
@@ -325,6 +326,243 @@ export const swaggerDocument = {
               },
             },
           },
+        },
+      },
+    },
+    '/api/v1/storefront': {
+      get: {
+        tags: ['Storefront'],
+        summary: 'Get Homepage Storefront Aggregate Data',
+        description: 'Returns store announcement configuration, active promotional hero banners, delivery policy, and top categories.',
+        responses: {
+          '200': {
+            description: 'Storefront aggregate payload',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        store: { type: 'object' },
+                        announcement: {
+                          type: 'object',
+                          properties: {
+                            text: { type: 'string', example: '🎉 Grand Festive Sale: Flat 15% OFF on all Authentic Groceries!' },
+                            link: { type: 'string', example: '/offers' },
+                            isActive: { type: 'boolean', example: true },
+                          },
+                        },
+                        banners: { type: 'array', items: { type: 'object' } },
+                        featuredCategories: { type: 'array', items: { type: 'object' } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/v1/storefront/config': {
+      get: {
+        tags: ['Storefront'],
+        summary: 'Get Announcement Bar & Store Settings',
+        description: 'Returns top announcement text, link, active flag, free shipping threshold, and support contacts.',
+        responses: {
+          '200': {
+            description: 'Storefront configuration details',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { type: 'object' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      put: {
+        tags: ['Storefront'],
+        summary: 'Update Announcement Bar & Store Settings',
+        description: 'Update announcement banner text, link, active toggle, delivery SLA, and policy. Requires **Manager** or **Admin** role.',
+        security: [{ BearerAuth: [] }, { MockRoleHeader: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  announcementText: { type: 'string', example: '⚡ Mega Flash Sale: 20% OFF on all Spices today!' },
+                  announcementLink: { type: 'string', example: '/deals' },
+                  isAnnouncementActive: { type: 'boolean', example: true },
+                  freeShippingThreshold: { type: 'number', example: 999.00 },
+                  deliverySla: { type: 'string', example: 'Fast 2-Hour Express Delivery' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Storefront configuration updated successfully',
+          },
+          '403': { description: 'Forbidden: Staff role required' },
+        },
+      },
+    },
+    '/api/v1/storefront/banners': {
+      get: {
+        tags: ['Storefront'],
+        summary: 'List Promotional Hero Banners',
+        description: 'Returns promotional carousel cards and hero banners. Public sees active banners; pass `?all=true` for admin dashboard management.',
+        parameters: [
+          { name: 'placement', in: 'query', schema: { type: 'string', enum: ['HERO', 'MIDDLE', 'POPUP', 'SIDEBAR'] }, description: 'Filter by banner placement area' },
+          { name: 'all', in: 'query', schema: { type: 'string', enum: ['true', 'false'] }, description: 'Include inactive banners for admin management' },
+        ],
+        responses: {
+          '200': {
+            description: 'List of promotional banners',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    totalCount: { type: 'integer', example: 3 },
+                    data: { type: 'array', items: { type: 'object' } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ['Storefront'],
+        summary: 'Create Promotional Banner',
+        description: 'Create a new promotional hero banner or section card. Requires **Manager** or **Admin** role.',
+        security: [{ BearerAuth: [] }, { MockRoleHeader: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['title', 'imageUrl'],
+                properties: {
+                  title: { type: 'string', example: 'Grand Diwali Sweet & Spice Hampers' },
+                  subtitle: { type: 'string', example: 'Freshly prepared festive mithai and cold-pressed pure oils.' },
+                  badge: { type: 'string', example: 'FESTIVE SALE' },
+                  imageUrl: { type: 'string', example: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d' },
+                  ctaText: { type: 'string', example: 'Explore Deals' },
+                  ctaLink: { type: 'string', example: '/products' },
+                  displayOrder: { type: 'integer', example: 1 },
+                  isActive: { type: 'boolean', example: true },
+                  placement: { type: 'string', example: 'HERO' },
+                  bgGradient: { type: 'string', example: 'from-amber-700 to-orange-900' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Banner created successfully',
+          },
+          '400': { description: 'Missing required title or image URL' },
+          '403': { description: 'Forbidden: Staff role required' },
+        },
+      },
+    },
+    '/api/v1/storefront/banners/{id}': {
+      get: {
+        tags: ['Storefront'],
+        summary: 'Get Banner by ID',
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Banner UUID' },
+        ],
+        responses: {
+          '200': { description: 'Banner found' },
+          '404': { description: 'Banner not found' },
+        },
+      },
+      put: {
+        tags: ['Storefront'],
+        summary: 'Update Promotional Banner',
+        security: [{ BearerAuth: [] }, { MockRoleHeader: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Banner UUID' },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string', example: 'Updated Banner Title' },
+                  subtitle: { type: 'string', example: 'Updated subtitle' },
+                  badge: { type: 'string', example: 'LIMITED TIME' },
+                  imageUrl: { type: 'string', example: 'https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d' },
+                  ctaText: { type: 'string', example: 'Shop Now' },
+                  ctaLink: { type: 'string', example: '/products?category=Spices' },
+                  displayOrder: { type: 'integer', example: 2 },
+                  isActive: { type: 'boolean', example: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': { description: 'Banner updated successfully' },
+          '404': { description: 'Banner not found' },
+        },
+      },
+      delete: {
+        tags: ['Storefront'],
+        summary: 'Delete Promotional Banner',
+        security: [{ BearerAuth: [] }, { MockRoleHeader: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Banner UUID' },
+        ],
+        responses: {
+          '200': { description: 'Banner deleted successfully' },
+          '404': { description: 'Banner not found' },
+        },
+      },
+    },
+    '/api/v1/storefront/banners/{id}/toggle': {
+      patch: {
+        tags: ['Storefront'],
+        summary: 'Toggle Banner Active Status',
+        security: [{ BearerAuth: [] }, { MockRoleHeader: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Banner UUID' },
+        ],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  isActive: { type: 'boolean', example: false },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': { description: 'Banner status toggled successfully' },
+          '404': { description: 'Banner not found' },
         },
       },
     },

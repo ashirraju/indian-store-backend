@@ -274,6 +274,84 @@ async function seed() {
     }
     console.log(`✅ Seeded ${products.length} Catalog Products with Original Price, Discounts & Selling Price.`);
 
+    // 5. Seed Storefront Default Configuration
+    await pool.query(`
+      INSERT INTO storefront_config (
+        id, store_name, tagline, announcement_text, announcement_link, is_announcement_active,
+        free_shipping_threshold, support_phone, support_email, delivery_sla, currency_symbol, currency_code
+      ) VALUES (
+        'default',
+        'Indian Store',
+        'Authentic Indian Groceries & Essentials Delivered Fast',
+        '🎉 Grand Festive Sale: Flat 15% OFF on all Authentic Groceries! Use Code FESTIVE15',
+        '/offers',
+        true,
+        999.00,
+        '+91 98765 43210',
+        'support@indianstore.com',
+        'Fast 2-Hour Express Delivery',
+        '₹',
+        'INR'
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        store_name = EXCLUDED.store_name,
+        announcement_text = EXCLUDED.announcement_text,
+        announcement_link = EXCLUDED.announcement_link,
+        is_announcement_active = EXCLUDED.is_announcement_active,
+        free_shipping_threshold = EXCLUDED.free_shipping_threshold,
+        updated_at = CURRENT_TIMESTAMP
+    `);
+    console.log('✅ Seeded Default Storefront Configuration & Announcement Bar.');
+
+    // 6. Seed Promotional Hero Banners
+    const banners = [
+      {
+        title: 'Authentic Indian Grocery Delivered to Your Doorstep',
+        subtitle: 'From aged Biryani Basmati to stone-ground spices and organic lentils.',
+        badge: 'FESTIVE SALE',
+        imageUrl: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=1200&auto=format&fit=crop&q=80',
+        ctaText: 'Explore Deals',
+        ctaLink: '/products',
+        displayOrder: 1,
+        isActive: true,
+        placement: 'HERO',
+        bgGradient: 'from-amber-700 to-orange-900',
+      },
+      {
+        title: 'Pure Desi Ghee & Farm Fresh Cold-Pressed Oils',
+        subtitle: '100% pure aroma and granular texture sourced directly from traditional dairies.',
+        badge: 'ORGANIC ESSENTIALS',
+        imageUrl: 'https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?w=1200&auto=format&fit=crop&q=80',
+        ctaText: 'Shop Oils & Ghee',
+        ctaLink: '/products?category=Oil%20%26%20ghee',
+        displayOrder: 2,
+        isActive: true,
+        placement: 'HERO',
+        bgGradient: 'from-emerald-800 to-teal-950',
+      },
+      {
+        title: 'Handcrafted Traditional Sweets & Festive Mithai',
+        subtitle: 'Freshly prepared Gulab Jamun, Kaju Katli, and crispy namkeen packs.',
+        badge: 'SWEET DELIGHTS',
+        imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=1200&auto=format&fit=crop&q=80',
+        ctaText: 'Browse Snacks',
+        ctaLink: '/products?category=Chips%20%26%20biscuits',
+        displayOrder: 3,
+        isActive: true,
+        placement: 'HERO',
+        bgGradient: 'from-rose-800 to-amber-900',
+      },
+    ];
+
+    for (const b of banners) {
+      await pool.query(`
+        INSERT INTO promotional_banners (
+          title, subtitle, badge, image_url, cta_text, cta_link, display_order, is_active, placement, bg_gradient
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `, [b.title, b.subtitle, b.badge, b.imageUrl, b.ctaText, b.ctaLink, b.displayOrder, b.isActive, b.placement, b.bgGradient]);
+    }
+    console.log(`✅ Seeded ${banners.length} Promotional Hero Banners.`);
+
     console.log('🎉 Database Seeding Completed Successfully!');
     process.exit(0);
   } catch (err) {
@@ -283,3 +361,4 @@ async function seed() {
 }
 
 seed();
+

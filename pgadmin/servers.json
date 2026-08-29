@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Indian Store Postgres",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "indian_store_db",
+      "Username": "store_admin",
+      "SSLMode": "prefer"
+    }
+  }
+}

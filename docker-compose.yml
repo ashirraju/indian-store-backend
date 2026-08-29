@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: indian_store_pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: indian_store_db
+      POSTGRES_USER: store_admin
+      POSTGRES_PASSWORD: store_secure_password_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U store_admin -d indian_store_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for Caching, Rate Limiting, and BullMQ
+  redis:
+    image: redis:7-alpine
+    container_name: indian_store_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Keycloak IAM (Identity & Access Management with RBAC)
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: indian_store_keycloak
+    restart: unless-stopped
+    command: start-dev --http-port=8080
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin_secure_password_2026
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/indian_store_db
+      KC_DB_USERNAME: store_admin
+      KC_DB_PASSWORD: store_secure_password_2026
+      KC_DB_SCHEMA: keycloak_schema
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # pgAdmin 4 - PostgreSQL Web Administration Tool
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: indian_store_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@indianstore.com
+      PGADMIN_DEFAULT_PASSWORD: admin_secure_password_2026
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmindata:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  pgadmindata:
+

@@ -1,0 +1,177 @@
+services:
+  # ==========================================
+  # 1. TRAEFIK REVERSE PROXY (AUTOMATIC SSL)
+  # ==========================================
+  traefik:
+    image: traefik:v3.0
+    container_name: indian_store_traefik
+    restart: always
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=INFO"
+      - "--accesslog=true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./traefik/traefik.yml:/etc/traefik/traefik.yml:ro"
+      - "./letsencrypt:/letsencrypt"
+    networks:
+      - web-gateway
+
+  # ==========================================
+  # 2. NODE.JS BACKEND API (EXPRESS)
+  # ==========================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: indian_store_api
+    restart: always
+    environment:
+      PORT: 5001
+      NODE_ENV: production
+      CLIENT_ORIGIN: "https://${FRONTEND_DOMAIN}"
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}"
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${DB_NAME}
+      PGUSER: ${DB_USER}
+      PGPASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KEYCLOAK_URL: "https://${KEYCLOAK_DOMAIN}"
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-indian-store}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-indian-store-api}
+      KEYCLOAK_JWKS_URI: "https://${KEYCLOAK_DOMAIN}/realms/${KEYCLOAK_REALM:-indian-store}/protocol/openid-connect/certs"
+      DEV_AUTH_BYPASS: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - web-gateway
+      - backend-internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`${API_DOMAIN}`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.api.loadbalancer.server.port=5001"
+
+  # ==========================================
+  # 3. KEYCLOAK IAM (AUTHENTICATION & RBAC)
+  # ==========================================
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: indian_store_keycloak
+    restart: always
+    command: start --optimized --http-enabled=true --proxy-headers=xforwarded --hostname=${KEYCLOAK_DOMAIN}
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
+      KC_DB_USERNAME: ${DB_USER}
+      KC_DB_PASSWORD: ${DB_PASSWORD}
+      KC_DB_SCHEMA: keycloak_schema
+      KC_HOSTNAME: ${KEYCLOAK_DOMAIN}
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      JAVA_OPTS_APPEND: "-Xms512m -Xmx1024m -XX:+UseG1GC"
+    volumes:
+      - ./themes:/opt/keycloak/themes
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - web-gateway
+      - backend-internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.keycloak.rule=Host(`${KEYCLOAK_DOMAIN}`)"
+      - "traefik.http.routers.keycloak.entrypoints=websecure"
+      - "traefik.http.routers.keycloak.tls.certresolver=letsencrypt"
+      - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
+      - "traefik.http.middlewares.kc-buffering.buffering.maxResponseBodyBytes=10485760"
+      - "traefik.http.routers.keycloak.middlewares=kc-buffering"
+
+  # ==========================================
+  # 4. POSTGRESQL 16 DATABASE
+  # ==========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: indian_store_pg
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    networks:
+      - backend-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # 5. REDIS 7 CACHE & QUEUES
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: indian_store_redis
+    restart: always
+    volumes:
+      - ./redisdata:/data
+    networks:
+      - backend-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # 6. PGADMIN 4 (DATABASE WEB MANAGER)
+  # ==========================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: indian_store_pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@indianstore.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    volumes:
+      - ./pgadmin:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - web-gateway
+      - backend-internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pgadmin.rule=Host(`${PGADMIN_DOMAIN:-db.indianstore.com}`)"
+      - "traefik.http.routers.pgadmin.entrypoints=websecure"
+      - "traefik.http.routers.pgadmin.tls.certresolver=letsencrypt"
+      - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
+
+networks:
+  web-gateway:
+    driver: bridge
+  backend-internal:
+    driver: bridge

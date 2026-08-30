@@ -3,9 +3,12 @@ services:
   # 1. TRAEFIK REVERSE PROXY (AUTOMATIC SSL)
   # ==========================================
   traefik:
-    image: traefik:v3.0
+    image: traefik:v3.7
     container_name: indian_store_traefik
     restart: always
+    environment:
+      # Docker Engine 29 no longer accepts the legacy v1.24 API used by older Traefik images.
+      DOCKER_API_VERSION: "1.40"
     command:
       - "--api.dashboard=true"
       - "--providers.docker=true"

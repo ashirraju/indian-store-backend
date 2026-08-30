@@ -100,7 +100,8 @@ services:
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-indian-store-api}
       KEYCLOAK_JWKS_URI: "https://${KEYCLOAK_DOMAIN:-indian-store-auth.trader-news.co.in}/realms/${KEYCLOAK_REALM:-indian-store}/protocol/openid-connect/certs"
       DEV_AUTH_BYPASS: "false"
-      CORS_ORIGIN: "*"
+      CLIENT_ORIGIN: "https://${FRONTEND_DOMAIN:-indian-store.trader-news.co.in},http://localhost:4200"
+      CORS_ORIGIN: "https://${FRONTEND_DOMAIN:-indian-store.trader-news.co.in},http://localhost:4200"
     networks:
       - indian-store-network
       - keycloak_net

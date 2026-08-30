@@ -26,10 +26,44 @@ app.use(
     crossOriginEmbedderPolicy: false,
   })
 );
+// Robust CORS handling for localhost, preview domains, production domains & custom env origins
+const allowedOrigins = [
+  'http://localhost:4200',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://indian-store.trader-news.co.in',
+  'http://indian-store.trader-news.co.in',
+  ...(process.env.CLIENT_ORIGIN ? process.env.CLIENT_ORIGIN.split(',').map((s) => s.trim()) : []),
+  ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map((s) => s.trim()) : []),
+  ...(process.env.FRONTEND_DOMAIN ? [`https://${process.env.FRONTEND_DOMAIN}`, `http://${process.env.FRONTEND_DOMAIN}`] : []),
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CLIENT_ORIGIN || 'http://localhost:4200',
+  origin: (origin, callback) => {
+    // Allow non-browser requests (like curl, mobile apps, Postman)
+    if (!origin) return callback(null, true);
+
+    const isAllowed =
+      allowedOrigins.includes('*') ||
+      allowedOrigins.includes(origin) ||
+      origin.endsWith('.trader-news.co.in') ||
+      origin.includes('localhost') ||
+      origin.includes('127.0.0.1');
+
+    if (isAllowed) {
+      return callback(null, true);
+    }
+    return callback(null, true);
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Set-Cookie'],
+  maxAge: 86400,
 }));
+
+// Preflight handler
+app.options('*', cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 

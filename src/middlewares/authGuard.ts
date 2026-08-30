@@ -65,17 +65,22 @@ export function authGuard(req: Request, res: Response, next: NextFunction) {
       });
     }
 
-    // Map Keycloak Realm / Resource roles to application AppRole
+    // Map Keycloak Realm / Resource roles to application AppRole (case-insensitive & supports client roles)
     const realmRoles: string[] = decoded.realm_access?.roles || [];
+    const resourceRoles: string[] = Object.values(decoded.resource_access || {}).flatMap(
+      (res: any) => res.roles || []
+    );
+    const allRoles = [...realmRoles, ...resourceRoles].map((r: string) => r.toLowerCase());
+
     let appRole: 'Customer' | 'Manager' | 'Operations' | 'Delivery' | 'Admin' = 'Customer';
 
-    if (realmRoles.includes('ROLE_ADMIN') || realmRoles.includes('admin')) {
+    if (allRoles.includes('admin') || allRoles.includes('role_admin') || allRoles.includes('superadmin')) {
       appRole = 'Admin';
-    } else if (realmRoles.includes('ROLE_MANAGER') || realmRoles.includes('manager')) {
+    } else if (allRoles.includes('manager') || allRoles.includes('role_manager')) {
       appRole = 'Manager';
-    } else if (realmRoles.includes('ROLE_OPERATIONS') || realmRoles.includes('operations')) {
+    } else if (allRoles.includes('operations') || allRoles.includes('role_operations')) {
       appRole = 'Operations';
-    } else if (realmRoles.includes('ROLE_DELIVERY') || realmRoles.includes('delivery')) {
+    } else if (allRoles.includes('delivery') || allRoles.includes('role_delivery')) {
       appRole = 'Delivery';
     }
 

@@ -226,3 +226,19 @@ CREATE TABLE IF NOT EXISTS promotional_banners (
 
 CREATE INDEX IF NOT EXISTS idx_banners_active_order ON promotional_banners(is_active, display_order);
 
+-- 15. STAFF & OPERATIONS NOTIFICATIONS
+CREATE TABLE IF NOT EXISTS staff_notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    recipient_role VARCHAR(50) NOT NULL DEFAULT 'Operations', -- 'Operations', 'Manager', 'Admin', 'Delivery', 'All'
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(50) NOT NULL DEFAULT 'NEW_ORDER', -- 'NEW_ORDER', 'LOW_STOCK', 'ORDER_CANCELLED', 'URGENT_SLA'
+    reference_id VARCHAR(100), -- Order ID, Product ID, etc.
+    metadata JSONB DEFAULT '{}',
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    read_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_staff_notifs_role_read ON staff_notifications(recipient_role, is_read, created_at DESC);
+

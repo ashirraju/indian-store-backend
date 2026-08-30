@@ -160,8 +160,7 @@ async function handleCheckout(req: Request, res: Response) {
 
     await client.query('COMMIT');
 
-    // Asynchronously dispatch notifications without blocking response
-    NotificationService.sendOrderEventNotification('ORDER_PLACED', {
+    const notificationPayload = {
       orderId,
       customerName: shippingAddress.fullName,
       customerEmail: req.user?.email || shippingAddress.email,
@@ -169,7 +168,18 @@ async function handleCheckout(req: Request, res: Response) {
       totalAmount: finalTotal,
       status: 'Placed',
       itemsCount: items.length,
-    }).catch(e => console.error('Notification worker failed', e));
+      shippingAddress,
+      items: orderItemsToInsert.map(oi => ({ name: oi.name, quantity: oi.quantity, unitPrice: oi.unitPrice })),
+      paymentMethod: paymentMethod || 'UPI',
+    };
+
+    // 1. Asynchronously dispatch customer notifications (Email, SMS, WhatsApp)
+    NotificationService.sendOrderEventNotification('ORDER_PLACED', notificationPayload)
+      .catch(e => console.error('Customer notification worker failed', e));
+
+    // 2. Asynchronously notify Operations Team (In-App DB alert, live SSE stream, Ops WhatsApp/Email)
+    NotificationService.notifyOperationsTeamAboutNewOrder(notificationPayload)
+      .catch(e => console.error('Operations notification worker failed', e));
 
     res.status(201).json({
       success: true,

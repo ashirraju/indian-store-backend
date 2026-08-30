@@ -12,6 +12,7 @@ import { ordersRouter } from './modules/orders/orders.router.js';
 import { paymentsRouter } from './modules/payments/payments.router.js';
 import { reportsRouter } from './modules/reports/reports.router.js';
 import { storefrontRouter } from './modules/storefront/storefront.router.js';
+import { notificationsRouter } from './modules/notifications/notifications.router.js';
 import { setupSwagger } from './config/swagger.js';
 
 dotenv.config();
@@ -57,6 +58,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 });
 
 // Mount Domain Modules
+app.use('/api/v1/notifications', notificationsRouter);
 app.use('/api/v1/storefront', storefrontRouter);
 app.use('/api/v1/banners', storefrontRouter); // Convenient alias for banner requests
 app.use('/api/v1/products', productsRouter);

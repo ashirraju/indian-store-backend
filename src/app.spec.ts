@@ -638,5 +638,83 @@ describe('Indian Store Backend API Suite', () => {
       expect(res.body.deletedBannerId).toBe(createdBannerId);
     });
   });
+
+  describe('Operations & Staff Notifications System API Suite', () => {
+    let testNotificationId = '';
+
+    it('GET /api/v1/notifications - lists operations notifications including new order alerts', async () => {
+      const res = await request(app)
+        .get('/api/v1/notifications?role=Operations')
+        .set('x-mock-role', 'Operations');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.length).toBeGreaterThanOrEqual(1);
+
+      const latest = res.body.data[0];
+      expect(latest.title).toBeDefined();
+      expect(latest.type).toBe('NEW_ORDER');
+      testNotificationId = latest.id;
+    });
+
+    it('GET /api/v1/notifications/unread-count - returns unread count badge for operations team', async () => {
+      const res = await request(app)
+        .get('/api/v1/notifications/unread-count')
+        .set('x-mock-role', 'Operations');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.role).toBe('Operations');
+      expect(typeof res.body.unreadCount).toBe('number');
+      expect(res.body.unreadCount).toBeGreaterThanOrEqual(1);
+    });
+
+    it('PATCH /api/v1/notifications/:id/read - marks single notification as read', async () => {
+      const res = await request(app)
+        .patch(`/api/v1/notifications/${testNotificationId}/read`)
+        .set('x-mock-role', 'Operations');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.isRead).toBe(true);
+      expect(res.body.data.readAt).toBeDefined();
+    });
+
+    it('POST /api/v1/notifications/broadcast - manager broadcasts urgent warehouse alert', async () => {
+      const res = await request(app)
+        .post('/api/v1/notifications/broadcast')
+        .set('x-mock-role', 'Manager')
+        .send({
+          recipientRole: 'Operations',
+          title: '⚡ Priority Dispatch Notice',
+          message: 'Express delivery surge: Please prioritize South-East zone orders for packing.',
+          type: 'URGENT_SLA',
+          metadata: { zone: 'South-East', surgeMultiplier: 1.5 },
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.title).toContain('Priority Dispatch Notice');
+      expect(res.body.data.type).toBe('URGENT_SLA');
+    });
+
+    it('POST /api/v1/notifications/mark-all-read - marks all unread operations notifications as read', async () => {
+      const res = await request(app)
+        .post('/api/v1/notifications/mark-all-read')
+        .set('x-mock-role', 'Operations')
+        .send({ role: 'Operations' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+
+      const countCheck = await request(app)
+        .get('/api/v1/notifications/unread-count')
+        .set('x-mock-role', 'Operations');
+
+      expect(countCheck.body.unreadCount).toBe(0);
+    });
+  });
 });
+
 

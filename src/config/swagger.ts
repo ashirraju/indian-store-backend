@@ -26,6 +26,7 @@ export const swaggerDocument = {
   ],
   tags: [
     { name: 'Health', description: 'System health & liveness checks' },
+    { name: 'Notifications', description: 'Operations warehouse alerts, real-time SSE stream & staff notification center' },
     { name: 'Storefront', description: 'Homepage aggregates, top announcement bar & promotional hero banners' },
     { name: 'Categories', description: 'Admin & Catalog Category and Sub-Category hierarchy management' },
     { name: 'Products', description: 'Catalog browsing, search, and product management' },
@@ -325,6 +326,79 @@ export const swaggerDocument = {
                 },
               },
             },
+          },
+        },
+      },
+    },
+    '/api/v1/notifications': {
+      get: {
+        tags: ['Notifications'],
+        summary: 'List Staff & Operations Notifications',
+        description: 'Fetch paginated order fulfillment alerts, stock warnings, and operations notifications for the authenticated role.',
+        security: [{ BearerAuth: [] }, { MockRoleHeader: [] }],
+        parameters: [
+          { name: 'role', in: 'query', schema: { type: 'string', default: 'Operations' }, description: 'Target role filter' },
+          { name: 'unreadOnly', in: 'query', schema: { type: 'boolean' }, description: 'Filter only unread alerts' },
+          { name: 'type', in: 'query', schema: { type: 'string', enum: ['NEW_ORDER', 'LOW_STOCK', 'ORDER_CANCELLED', 'URGENT_SLA'] }, description: 'Notification type filter' },
+          { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 20 } },
+        ],
+        responses: {
+          '200': {
+            description: 'List of staff notifications with unread count',
+          },
+        },
+      },
+    },
+    '/api/v1/notifications/unread-count': {
+      get: {
+        tags: ['Notifications'],
+        summary: 'Get Unread Notification Count',
+        description: 'Fast count of unread orders and alerts for Operations dashboard notification badge.',
+        security: [{ BearerAuth: [] }, { MockRoleHeader: [] }],
+        responses: {
+          '200': {
+            description: 'Unread counter badge payload',
+          },
+        },
+      },
+    },
+    '/api/v1/notifications/{id}/read': {
+      patch: {
+        tags: ['Notifications'],
+        summary: 'Mark Notification as Read',
+        security: [{ BearerAuth: [] }, { MockRoleHeader: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Notification UUID' },
+        ],
+        responses: {
+          '200': { description: 'Notification marked as read' },
+          '404': { description: 'Notification not found' },
+        },
+      },
+    },
+    '/api/v1/notifications/mark-all-read': {
+      post: {
+        tags: ['Notifications'],
+        summary: 'Mark All Notifications as Read',
+        description: 'Dismisses all unread alerts for the current staff/operations role.',
+        security: [{ BearerAuth: [] }, { MockRoleHeader: [] }],
+        responses: {
+          '200': { description: 'All notifications marked as read' },
+        },
+      },
+    },
+    '/api/v1/notifications/stream': {
+      get: {
+        tags: ['Notifications'],
+        summary: 'Live Server-Sent Events (SSE) Stream',
+        description: 'Real-time HTTP stream pushing instantaneous order packing and fulfillment alerts to Operations & Warehouse screens.',
+        parameters: [
+          { name: 'role', in: 'query', schema: { type: 'string', default: 'Operations' } },
+        ],
+        responses: {
+          '200': {
+            description: 'SSE stream connection established (Content-Type: text/event-stream)',
           },
         },
       },

@@ -51,6 +51,8 @@ services:
       KC_DB_SCHEMA: keycloak_schema
     ports:
       - "8080:8080"
+    volumes:
+      - ./themes:/opt/keycloak/themes
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,6 +1,9 @@
 -- Enable UUID Extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Ensure Keycloak Schema Exists for IAM
+CREATE SCHEMA IF NOT EXISTS keycloak_schema;
+
 -- 1. USERS & PROFILES TABLE
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

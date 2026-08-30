@@ -1,39 +1,47 @@
 services:
   # ==========================================
-  # 1. TRAEFIK REVERSE PROXY (AUTOMATIC SSL)
+  # 1. POSTGRESQL 16 DATABASE
   # ==========================================
-  traefik:
-    image: traefik:v3.0
-    container_name: indian_store_traefik
+  indian-store-db:
+    image: postgres:16-alpine
+    container_name: indian_store_postgres
     restart: always
-    command:
-      - "--api.dashboard=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-      - "--entrypoints.websecure.address=:443"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-      - "--log.level=INFO"
-      - "--accesslog=true"
-    ports:
-      - "80:80"
-      - "443:443"
+    environment:
+      POSTGRES_USER: ${DB_USER:-store_admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-store_prod_secure_pass_2026}
+      POSTGRES_DB: ${DB_NAME:-indian_store_db}
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./traefik/traefik.yml:/etc/traefik/traefik.yml:ro"
-      - "./letsencrypt:/letsencrypt"
+      - indian_store_postgres_data:/var/lib/postgresql/data
     networks:
-      - web-gateway
+      - indian-store-network
+      - keycloak_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-store_admin} -d ${DB_NAME:-indian_store_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ==========================================
-  # 2. NODE.JS BACKEND API (EXPRESS)
+  # 2. REDIS 7 CACHE
   # ==========================================
-  api:
+  indian-store-redis:
+    image: redis:7-alpine
+    container_name: indian_store_redis
+    restart: always
+    volumes:
+      - indian_store_redis_data:/data
+    networks:
+      - indian-store-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # 3. NODE.JS BACKEND API (EXPRESS)
+  # ==========================================
+  app:
     build:
       context: .
       dockerfile: Dockerfile
@@ -42,144 +50,85 @@ services:
     env_file:
       - .env
     environment:
-      PORT: 5001
       NODE_ENV: production
-      CLIENT_ORIGIN: "https://${FRONTEND_DOMAIN}"
-      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}"
-      PGHOST: postgres
+      PORT: 5001
+      DATABASE_URL: "postgresql://${DB_USER:-store_admin}:${DB_PASSWORD:-store_prod_secure_pass_2026}@indian-store-db:5432/${DB_NAME:-indian_store_db}"
+      PGHOST: indian-store-db
       PGPORT: 5432
-      PGDATABASE: ${DB_NAME}
-      PGUSER: ${DB_USER}
-      PGPASSWORD: ${DB_PASSWORD}
-      REDIS_HOST: redis
+      PGDATABASE: ${DB_NAME:-indian_store_db}
+      PGUSER: ${DB_USER:-store_admin}
+      PGPASSWORD: ${DB_PASSWORD:-store_prod_secure_pass_2026}
+      REDIS_HOST: indian-store-redis
       REDIS_PORT: 6379
-      KEYCLOAK_URL: "https://${KEYCLOAK_DOMAIN}"
+      KEYCLOAK_URL: "https://indian-store-auth.trader-news.co.in"
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-indian-store}
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-indian-store-api}
-      DEV_AUTH_BYPASS: "true"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      KEYCLOAK_JWKS_URI: "https://indian-store-auth.trader-news.co.in/realms/${KEYCLOAK_REALM:-indian-store}/protocol/openid-connect/certs"
+      DEV_AUTH_BYPASS: "false"
+      CORS_ORIGIN: "*"
     networks:
-      - web-gateway
-      - backend-internal
+      - indian-store-network
+      - keycloak_net
+    depends_on:
+      indian-store-db:
+        condition: service_healthy
+      indian-store-redis:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=web-gateway"
-      - "traefik.http.routers.api.rule=Host(`${API_DOMAIN}`)"
-      - "traefik.http.routers.api.entrypoints=websecure"
-      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
-      - "traefik.http.services.api.loadbalancer.server.port=5001"
+      - "traefik.http.routers.indian-store-api.rule=Host(`${API_DOMAIN:-indian-store-api.trader-news.co.in}`)"
+      - "traefik.http.routers.indian-store-api.entrypoints=websecure"
+      - "traefik.http.routers.indian-store-api.tls=true"
+      - "traefik.http.routers.indian-store-api.tls.certresolver=myresolver"
+      - "traefik.http.services.indian-store-api.loadbalancer.server.port=5001"
 
   # ==========================================
-  # 3. KEYCLOAK IAM (AUTHENTICATION & RBAC)
+  # 4. KEYCLOAK IAM (AUTHENTICATION & RBAC)
   # ==========================================
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
     container_name: indian_store_keycloak
     restart: always
-    command: start --http-enabled=true --proxy-headers=xforwarded --hostname=${KEYCLOAK_DOMAIN}
+    command: start --http-enabled=true --proxy-headers=xforwarded --hostname=indian-store-auth.trader-news.co.in
     env_file:
       - .env
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-keycloak_admin_prod_pass_2026}
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
-      KC_DB_USERNAME: ${DB_USER}
-      KC_DB_PASSWORD: ${DB_PASSWORD}
+      KC_DB_URL: jdbc:postgresql://indian-store-db:5432/${DB_NAME:-indian_store_db}
+      KC_DB_USERNAME: ${DB_USER:-store_admin}
+      KC_DB_PASSWORD: ${DB_PASSWORD:-store_prod_secure_pass_2026}
       KC_DB_SCHEMA: keycloak_schema
-      KC_HOSTNAME: ${KEYCLOAK_DOMAIN}
+      KC_HOSTNAME: indian-store-auth.trader-news.co.in
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
       JAVA_OPTS_APPEND: "-Xms512m -Xmx1024m"
     volumes:
       - ./themes:/opt/keycloak/themes
     depends_on:
-      postgres:
+      indian-store-db:
         condition: service_healthy
     networks:
-      - web-gateway
-      - backend-internal
+      - indian-store-network
+      - keycloak_net
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=web-gateway"
-      - "traefik.http.routers.keycloak.rule=Host(`${KEYCLOAK_DOMAIN}`)"
-      - "traefik.http.routers.keycloak.entrypoints=websecure"
-      - "traefik.http.routers.keycloak.tls.certresolver=letsencrypt"
-      - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
+      - "traefik.http.routers.indian-store-auth.rule=Host(`${KEYCLOAK_DOMAIN:-indian-store-auth.trader-news.co.in}`)"
+      - "traefik.http.routers.indian-store-auth.entrypoints=websecure"
+      - "traefik.http.routers.indian-store-auth.tls=true"
+      - "traefik.http.routers.indian-store-auth.tls.certresolver=myresolver"
+      - "traefik.http.services.indian-store-auth.loadbalancer.server.port=8080"
       - "traefik.http.middlewares.kc-buffering.buffering.maxResponseBodyBytes=10485760"
-      - "traefik.http.routers.keycloak.middlewares=kc-buffering"
+      - "traefik.http.routers.indian-store-auth.middlewares=kc-buffering"
 
-  # ==========================================
-  # 4. POSTGRESQL 16 DATABASE
-  # ==========================================
-  postgres:
-    image: postgres:16-alpine
-    container_name: indian_store_pg
-    restart: always
-    environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
-    volumes:
-      - ./pgdata:/var/lib/postgresql/data
-    networks:
-      - backend-internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # ==========================================
-  # 5. REDIS 7 CACHE & QUEUES
-  # ==========================================
-  redis:
-    image: redis:7-alpine
-    container_name: indian_store_redis
-    restart: always
-    volumes:
-      - ./redisdata:/data
-    networks:
-      - backend-internal
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # ==========================================
-  # 6. PGADMIN 4 (DATABASE WEB MANAGER)
-  # ==========================================
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: indian_store_pgadmin
-    restart: always
-    env_file:
-      - .env
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@indianstore.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
-    volumes:
-      - ./pgadmin:/var/lib/pgadmin
-    depends_on:
-      - postgres
-    networks:
-      - web-gateway
-      - backend-internal
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=web-gateway"
-      - "traefik.http.routers.pgadmin.rule=Host(`${PGADMIN_DOMAIN:-db.indianstore.com}`)"
-      - "traefik.http.routers.pgadmin.entrypoints=websecure"
-      - "traefik.http.routers.pgadmin.tls.certresolver=letsencrypt"
-      - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
+volumes:
+  indian_store_postgres_data:
+  indian_store_redis_data:
 
 networks:
-  web-gateway:
+  indian-store-network:
     driver: bridge
-  backend-internal:
-    driver: bridge
+  keycloak_net:
+    name: keycloak_keycloak_net
+    external: true

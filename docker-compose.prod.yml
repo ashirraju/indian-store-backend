@@ -39,6 +39,8 @@ services:
       dockerfile: Dockerfile
     container_name: indian_store_api
     restart: always
+    env_file:
+      - .env
     environment:
       PORT: 5001
       NODE_ENV: production
@@ -54,8 +56,7 @@ services:
       KEYCLOAK_URL: "https://${KEYCLOAK_DOMAIN}"
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-indian-store}
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-indian-store-api}
-      KEYCLOAK_JWKS_URI: "https://${KEYCLOAK_DOMAIN}/realms/${KEYCLOAK_REALM:-indian-store}/protocol/openid-connect/certs"
-      DEV_AUTH_BYPASS: "false"
+      DEV_AUTH_BYPASS: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,6 +67,7 @@ services:
       - backend-internal
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=web-gateway"
       - "traefik.http.routers.api.rule=Host(`${API_DOMAIN}`)"
       - "traefik.http.routers.api.entrypoints=websecure"
       - "traefik.http.routers.api.tls.certresolver=letsencrypt"
@@ -78,7 +80,9 @@ services:
     image: quay.io/keycloak/keycloak:24.0
     container_name: indian_store_keycloak
     restart: always
-    command: start --optimized --http-enabled=true --proxy-headers=xforwarded --hostname=${KEYCLOAK_DOMAIN}
+    command: start --http-enabled=true --proxy-headers=xforwarded --hostname=${KEYCLOAK_DOMAIN}
+    env_file:
+      - .env
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
@@ -90,7 +94,7 @@ services:
       KC_HOSTNAME: ${KEYCLOAK_DOMAIN}
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
-      JAVA_OPTS_APPEND: "-Xms512m -Xmx1024m -XX:+UseG1GC"
+      JAVA_OPTS_APPEND: "-Xms512m -Xmx1024m"
     volumes:
       - ./themes:/opt/keycloak/themes
     depends_on:
@@ -101,6 +105,7 @@ services:
       - backend-internal
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=web-gateway"
       - "traefik.http.routers.keycloak.rule=Host(`${KEYCLOAK_DOMAIN}`)"
       - "traefik.http.routers.keycloak.entrypoints=websecure"
       - "traefik.http.routers.keycloak.tls.certresolver=letsencrypt"
@@ -153,6 +158,8 @@ services:
     image: dpage/pgadmin4:latest
     container_name: indian_store_pgadmin
     restart: always
+    env_file:
+      - .env
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@indianstore.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
@@ -165,6 +172,7 @@ services:
       - backend-internal
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=web-gateway"
       - "traefik.http.routers.pgadmin.rule=Host(`${PGADMIN_DOMAIN:-db.indianstore.com}`)"
       - "traefik.http.routers.pgadmin.entrypoints=websecure"
       - "traefik.http.routers.pgadmin.tls.certresolver=letsencrypt"

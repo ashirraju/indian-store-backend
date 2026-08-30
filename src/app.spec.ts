@@ -3,6 +3,13 @@ import request from 'supertest';
 import { app } from './app.js';
 
 describe('Indian Store Backend API Suite', () => {
+  it('GET / - returns API service information', async () => {
+    const res = await request(app).get('/');
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('UP');
+    expect(res.body.health).toBe('/api/health');
+  });
+
   it('GET /api/health - returns UP status', async () => {
     const res = await request(app).get('/api/health');
     expect(res.status).toBe(200);
@@ -716,5 +723,4 @@ describe('Indian Store Backend API Suite', () => {
     });
   });
 });
-
 

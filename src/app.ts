@@ -48,6 +48,15 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Health Check Endpoint
+app.get('/', (_req: Request, res: Response) => {
+  res.json({
+    status: 'UP',
+    service: 'Indian Store Backend API',
+    health: '/api/health',
+    documentation: '/api-docs',
+  });
+});
+
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({
     status: 'UP',

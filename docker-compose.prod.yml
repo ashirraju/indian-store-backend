@@ -1,6 +1,36 @@
 services:
   # ==========================================
-  # 1. POSTGRESQL 16 DATABASE
+  # 1. TRAEFIK REVERSE PROXY (AUTOMATIC SSL)
+  # ==========================================
+  traefik:
+    image: traefik:v3.0
+    container_name: indian_store_traefik
+    restart: always
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL:-admin@trader-news.co.in}"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=INFO"
+      - "--accesslog=true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
+    networks:
+      - keycloak_net
+
+  # ==========================================
+  # 2. POSTGRESQL 16 DATABASE
   # ==========================================
   indian-store-db:
     image: postgres:16-alpine
@@ -22,7 +52,7 @@ services:
       retries: 5
 
   # ==========================================
-  # 2. REDIS 7 CACHE
+  # 3. REDIS 7 CACHE
   # ==========================================
   indian-store-redis:
     image: redis:7-alpine
@@ -39,7 +69,7 @@ services:
       retries: 5
 
   # ==========================================
-  # 3. NODE.JS BACKEND API (EXPRESS)
+  # 4. NODE.JS BACKEND API (EXPRESS)
   # ==========================================
   app:
     build:
@@ -76,14 +106,15 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.indian-store-api.rule=Host(`${API_DOMAIN:-indian-store-api.trader-news.co.in}`)"
+      - "traefik.docker.network=keycloak_keycloak_net"
+      - "traefik.http.routers.indian-store-api.rule=Host(`indian-store-api.trader-news.co.in`)"
       - "traefik.http.routers.indian-store-api.entrypoints=websecure"
       - "traefik.http.routers.indian-store-api.tls=true"
       - "traefik.http.routers.indian-store-api.tls.certresolver=myresolver"
       - "traefik.http.services.indian-store-api.loadbalancer.server.port=5001"
 
   # ==========================================
-  # 4. KEYCLOAK IAM (AUTHENTICATION & RBAC)
+  # 5. KEYCLOAK IAM (AUTHENTICATION & RBAC)
   # ==========================================
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
@@ -114,7 +145,8 @@ services:
       - keycloak_net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.indian-store-auth.rule=Host(`${KEYCLOAK_DOMAIN:-indian-store-auth.trader-news.co.in}`)"
+      - "traefik.docker.network=keycloak_keycloak_net"
+      - "traefik.http.routers.indian-store-auth.rule=Host(`indian-store-auth.trader-news.co.in`)"
       - "traefik.http.routers.indian-store-auth.entrypoints=websecure"
       - "traefik.http.routers.indian-store-auth.tls=true"
       - "traefik.http.routers.indian-store-auth.tls.certresolver=myresolver"
@@ -131,4 +163,4 @@ networks:
     driver: bridge
   keycloak_net:
     name: keycloak_keycloak_net
-    external: true
+    driver: bridge

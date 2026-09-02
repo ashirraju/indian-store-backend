@@ -10,6 +10,8 @@
     "start": "node dist/server.js",
     "db:schema": "tsx src/database/migrate.ts",
     "db:seed": "tsx src/database/seed.ts",
+    "db:clear": "tsx src/database/clear.ts",
+    "db:reset": "npm run db:clear && npm run db:seed",
     "test": "vitest run"
   },
   "dependencies": {

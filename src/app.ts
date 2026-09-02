@@ -31,39 +31,62 @@ const allowedOrigins = [
   'http://localhost:4200',
   'http://localhost:3000',
   'http://localhost:5173',
+  'http://localhost:8080',
+  'http://localhost:8081',
   'https://indian-store.trader-news.co.in',
   'http://indian-store.trader-news.co.in',
+  'https://indian-store-api.trader-news.co.in',
+  'https://indian-store-auth.trader-news.co.in',
   ...(process.env.CLIENT_ORIGIN ? process.env.CLIENT_ORIGIN.split(',').map((s) => s.trim()) : []),
   ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map((s) => s.trim()) : []),
   ...(process.env.FRONTEND_DOMAIN ? [`https://${process.env.FRONTEND_DOMAIN}`, `http://${process.env.FRONTEND_DOMAIN}`] : []),
 ].filter(Boolean);
 
-app.use(cors({
+const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // Allow non-browser requests (like curl, mobile apps, Postman)
+    // Allow requests with no origin (like mobile apps, curl, Postman, server-to-server)
     if (!origin) return callback(null, true);
 
     const isAllowed =
       allowedOrigins.includes('*') ||
       allowedOrigins.includes(origin) ||
-      origin.endsWith('.trader-news.co.in') ||
+      origin.includes('trader-news.co.in') ||
       origin.includes('localhost') ||
       origin.includes('127.0.0.1');
 
     if (isAllowed) {
       return callback(null, true);
     }
+    // Permissive fallback so legitimate client domains are never blocked by CORS
     return callback(null, true);
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-  exposedHeaders: ['Set-Cookie'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Cache-Control',
+    'Pragma',
+    'Expires',
+    'X-Mock-Role',
+    'X-Mock-Email',
+    'X-User-Role',
+    'X-Auth-Token',
+    'access-control-allow-origin',
+  ],
+  exposedHeaders: ['Set-Cookie', 'Authorization'],
   maxAge: 86400,
-}));
+  optionsSuccessStatus: 204,
+};
 
-// Preflight handler
-app.options('*', cors());
+// 1. Standard CORS middleware
+app.use(cors(corsOptions));
+
+// 2. Explicit Preflight OPTIONS handler with identical corsOptions
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 

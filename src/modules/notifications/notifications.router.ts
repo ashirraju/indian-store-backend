@@ -29,13 +29,22 @@ function formatNotification(row: any) {
 // GET /api/v1/notifications/stream - Server-Sent Events endpoint for Operations & Staff dashboards
 notificationsRouter.get('/stream', (req: Request, res: Response) => {
   const role = (req.query.role as string) || 'Operations';
+  const origin = req.headers.origin;
 
-  // Set SSE HTTP Headers
+  // Set SSE HTTP Headers with proper CORS credentials & proxy compatibility
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
+    'Cache-Control': 'no-cache, no-transform',
     'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
+    'X-Accel-Buffering': 'no', // Disable Traefik/Nginx reverse proxy buffering for real-time SSE
+    ...(origin
+      ? {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Credentials': 'true',
+        }
+      : {
+          'Access-Control-Allow-Origin': '*',
+        }),
   });
 
   const clientId = NotificationService.registerSseClient(role, res);

@@ -350,13 +350,37 @@ ordersRouter.patch('/:id/status', authGuard, roleGuard('Operations', 'Delivery',
     const { id } = req.params;
     const { status, notes, assignedDeliveryAgent } = req.body;
 
-    const validStatuses = ['Placed', 'In Packing', 'Ready for Dispatch', 'Out for Delivery', 'Delivered', 'Cancelled'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ success: false, error: 'INVALID_STATUS', message: `Status must be one of: ${validStatuses.join(', ')}` });
+    // Normalize status aliases from different frontend versions (e.g. 'Packed' -> 'In Packing' or direct support)
+    const statusMap: Record<string, string> = {
+      'placed': 'Placed',
+      'in packing': 'In Packing',
+      'in_packing': 'In Packing',
+      'packing': 'In Packing',
+      'packed': 'In Packing',
+      'ready for dispatch': 'Ready for Dispatch',
+      'ready_for_dispatch': 'Ready for Dispatch',
+      'dispatched': 'Ready for Dispatch',
+      'shipped': 'Ready for Dispatch',
+      'out for delivery': 'Out for Delivery',
+      'out_for_delivery': 'Out for Delivery',
+      'delivered': 'Delivered',
+      'cancelled': 'Cancelled',
+      'canceled': 'Cancelled',
+    };
+
+    const targetStatus = status ? (statusMap[status.toString().trim().toLowerCase()] || status) : null;
+    const validStatuses = ['Placed', 'In Packing', 'Packed', 'Ready for Dispatch', 'Out for Delivery', 'Delivered', 'Cancelled'];
+
+    if (!targetStatus || !validStatuses.includes(targetStatus)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'INVALID_STATUS', 
+        message: `Status must be one of: ${validStatuses.join(', ')}` 
+      });
     }
 
     let updateSql = 'UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP';
-    const params: any[] = [status];
+    const params: any[] = [targetStatus];
 
     if (assignedDeliveryAgent) {
       params.push(assignedDeliveryAgent);
@@ -378,13 +402,13 @@ ordersRouter.patch('/:id/status', authGuard, roleGuard('Operations', 'Delivery',
     await query(`
       INSERT INTO order_timeline (order_id, status, notes, timestamp, is_completed)
       VALUES ($1, $2, $3, $4, true)
-    `, [id, status, notes || `Status updated to ${status} by ${req.user?.name}`, nowTime]);
+    `, [id, targetStatus, notes || `Status updated to ${targetStatus} by ${req.user?.name}`, nowTime]);
 
     // Send customer notification on major status transitions
     let eventName: 'ORDER_PACKED' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | null = null;
-    if (status === 'In Packing') eventName = 'ORDER_PACKED';
-    if (status === 'Out for Delivery') eventName = 'OUT_FOR_DELIVERY';
-    if (status === 'Delivered') eventName = 'DELIVERED';
+    if (targetStatus === 'In Packing' || targetStatus === 'Packed') eventName = 'ORDER_PACKED';
+    if (targetStatus === 'Out for Delivery') eventName = 'OUT_FOR_DELIVERY';
+    if (targetStatus === 'Delivered') eventName = 'DELIVERED';
 
     if (eventName) {
       NotificationService.sendOrderEventNotification(eventName, {

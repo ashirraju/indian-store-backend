@@ -388,7 +388,7 @@ productsRouter.post('/', authGuard, roleGuard('Manager', 'Admin'), async (req: R
       prodId, prodSku, name.trim(), prodSlug, prodCategory, prodSubCategory,
       pricing.price, pricing.originalPrice, pricing.discountType, pricing.discountValue,
       rating || 5.0, reviewsCount || 0,
-      imageUrl || 'https://images.unsplash.com/photo-1586201375761-83865001e31c',
+      imageUrl || '',
       description || '', weight || '1 Unit', Number(stock || 0), Number(lowStockThreshold || 10),
       Boolean(isOrganic), Boolean(isBestseller), originRegion || 'India', tags || []
     ];
@@ -1011,7 +1011,7 @@ async function handleBulkImport(req: Request, res: Response) {
           pricing.discountValue,
           Number(item.rating || 5.0),
           Number(item.reviewsCount || item.reviews_count || 0),
-          item.imageUrl || item.image_url || item.image || 'https://images.unsplash.com/photo-1586201375761-83865001e31c',
+          item.imageUrl || item.image_url || item.image || '',
           item.description || '',
           item.weight || '1 Unit',
           Number(item.stock || 0),

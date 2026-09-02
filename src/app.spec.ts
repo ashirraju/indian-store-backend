@@ -487,13 +487,13 @@ describe('Indian Store Backend API Suite', () => {
       expect(res.body.data.timeline.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('PATCH /api/v1/orders/:id/status - transitions status to In Packing', async () => {
+    it('PATCH /api/v1/orders/:id/status - transitions status to In Packing (and accepts Packed)', async () => {
       const res = await request(app)
         .patch(`/api/v1/orders/${testOrderId}/status`)
         .set('x-mock-role', 'Operations')
         .send({
-          status: 'In Packing',
-          notes: 'Packed into Box #5',
+          status: 'Packed',
+          notes: 'Packed and sealed with tamper-proof security tape',
         });
 
       expect(res.status).toBe(200);
@@ -720,6 +720,31 @@ describe('Indian Store Backend API Suite', () => {
         .set('x-mock-role', 'Operations');
 
       expect(countCheck.body.unreadCount).toBe(0);
+    });
+
+    it('OPTIONS /api/v1/notifications & any endpoint - handles CORS preflight with credentials properly', async () => {
+      const res = await request(app)
+        .options('/api/v1/notifications')
+        .set('Origin', 'https://indian-store.trader-news.co.in')
+        .set('Access-Control-Request-Method', 'GET')
+        .set('Access-Control-Request-Headers', 'Authorization, Content-Type');
+
+      expect(res.status).toBe(204);
+      expect(res.headers['access-control-allow-origin']).toBe('https://indian-store.trader-news.co.in');
+      expect(res.headers['access-control-allow-credentials']).toBe('true');
+    });
+
+    it('OPTIONS /api/v1/orders/:id/status - allows x-mock-role header from http://localhost:4200', async () => {
+      const res = await request(app)
+        .options('/api/v1/orders/ORD-9822/status')
+        .set('Origin', 'http://localhost:4200')
+        .set('Access-Control-Request-Method', 'PATCH')
+        .set('Access-Control-Request-Headers', 'content-type, x-mock-role, authorization');
+
+      expect(res.status).toBe(204);
+      expect(res.headers['access-control-allow-origin']).toBe('http://localhost:4200');
+      expect(res.headers['access-control-allow-credentials']).toBe('true');
+      expect(res.headers['access-control-allow-headers'].toLowerCase()).toContain('x-mock-role');
     });
   });
 });

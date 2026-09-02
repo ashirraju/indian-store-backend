@@ -13,7 +13,9 @@ import { paymentsRouter } from './modules/payments/payments.router.js';
 import { reportsRouter } from './modules/reports/reports.router.js';
 import { storefrontRouter } from './modules/storefront/storefront.router.js';
 import { notificationsRouter } from './modules/notifications/notifications.router.js';
+import { uploadRouter } from './modules/upload/upload.router.js';
 import { setupSwagger } from './config/swagger.js';
+import path from 'path';
 
 dotenv.config();
 
@@ -134,6 +136,24 @@ app.use('/api/v1/coupons', couponsRouter);
 app.use('/api/v1/orders', ordersRouter);
 app.use('/api/v1/payments', paymentsRouter);
 app.use('/api/v1/reports', reportsRouter);
+app.use('/api/v1/upload', uploadRouter);
+app.use('/api/v1/uploads', uploadRouter);
+
+// Static file serving for uploaded media assets (with 30-day immutable caching for CDN / Browser)
+const uploadsDirectory = path.resolve(process.env.UPLOADS_PATH || './uploads');
+app.use(
+  '/uploads',
+  (_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+  },
+  express.static(uploadsDirectory, {
+    maxAge: '30d',
+    immutable: true,
+    index: false,
+  })
+);
 
 // 404 Handler
 app.use((req: Request, res: Response) => {

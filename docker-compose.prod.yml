@@ -102,6 +102,10 @@ services:
       DEV_AUTH_BYPASS: "false"
       CLIENT_ORIGIN: "https://${FRONTEND_DOMAIN:-indian-store.trader-news.co.in},http://localhost:4200"
       CORS_ORIGIN: "https://${FRONTEND_DOMAIN:-indian-store.trader-news.co.in},http://localhost:4200"
+      UPLOADS_PATH: "/app/uploads"
+      PUBLIC_ASSET_URL: "https://${API_DOMAIN:-indian-store-api.trader-news.co.in}"
+    volumes:
+      - ./uploads:/app/uploads
     networks:
       - indian-store-network
       - keycloak_net

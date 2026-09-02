@@ -35,6 +35,7 @@ export const swaggerDocument = {
     { name: 'Orders', description: 'Atomic checkout with stock lock, order tracking & state machine' },
     { name: 'Payments', description: 'Razorpay payment intent creation & webhook listener' },
     { name: 'Reports', description: 'Executive sales, category revenue & fulfillment SLA metrics' },
+    { name: 'Uploads & Media', description: 'Product & banner image uploads, Sharp WebP compression, and static asset delivery' },
   ],
   components: {
     securitySchemes: {
@@ -2085,8 +2086,165 @@ export const swaggerDocument = {
         },
       },
     },
+    '/api/v1/upload': {
+      post: {
+        tags: ['Uploads & Media'],
+        summary: 'Upload and compress single product/banner image',
+        description: 'Uploads an image file (JPEG, PNG, WebP, AVIF), auto-orients, compresses to WebP, resizes to max 1200x1200, and returns the public asset URL.',
+        security: [{ BearerAuth: [] }, { MockRoleHeader: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['image'],
+                properties: {
+                  image: {
+                    type: 'string',
+                    format: 'binary',
+                    description: 'Image file to upload (JPEG, PNG, WebP, AVIF, max 10MB)',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Image uploaded and converted to WebP successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Image uploaded and optimized to WebP successfully.' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        url: { type: 'string', example: 'http://localhost:5001/uploads/img_172528_abc123.webp' },
+                        imageUrl: { type: 'string', example: 'http://localhost:5001/uploads/img_172528_abc123.webp' },
+                        filename: { type: 'string', example: 'img_172528_abc123.webp' },
+                        format: { type: 'string', example: 'webp' },
+                        size: { type: 'integer', example: 54320 },
+                        originalSize: { type: 'integer', example: 1240000 },
+                        savingsPercent: { type: 'integer', example: 96 },
+                        width: { type: 'integer', example: 1000 },
+                        height: { type: 'integer', example: 800 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid file format or file size exceeded (max 10MB)' },
+          '401': { description: 'Unauthorized' },
+          '403': { description: 'Forbidden: Manager or Admin role required' },
+        },
+      },
+    },
+    '/api/v1/upload/multiple': {
+      post: {
+        tags: ['Uploads & Media'],
+        summary: 'Batch upload up to 10 images',
+        description: 'Uploads up to 10 image files simultaneously, converts each to WebP, and returns an array of public URLs.',
+        security: [{ BearerAuth: [] }, { MockRoleHeader: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['images'],
+                properties: {
+                  images: {
+                    type: 'array',
+                    items: {
+                      type: 'string',
+                      format: 'binary',
+                    },
+                    description: 'Array of up to 10 image files to upload',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Images uploaded successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Successfully uploaded and optimized 3 images.' },
+                    data: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          url: { type: 'string', example: 'http://localhost:5001/uploads/img_172528_abc123.webp' },
+                          imageUrl: { type: 'string', example: 'http://localhost:5001/uploads/img_172528_abc123.webp' },
+                          filename: { type: 'string', example: 'img_172528_abc123.webp' },
+                          size: { type: 'integer', example: 54320 },
+                          format: { type: 'string', example: 'webp' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'No files provided or invalid file format' },
+          '401': { description: 'Unauthorized' },
+          '403': { description: 'Forbidden: Manager or Admin role required' },
+        },
+      },
+    },
+    '/api/v1/upload/{filename}': {
+      delete: {
+        tags: ['Uploads & Media'],
+        summary: 'Delete uploaded media file',
+        description: 'Permanently deletes an uploaded image file from local storage.',
+        security: [{ BearerAuth: [] }, { MockRoleHeader: [] }],
+        parameters: [
+          {
+            name: 'filename',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Name of the file to delete (e.g. img_172528_abc123.webp)',
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'File deleted successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: "File 'img_172528_abc123.webp' deleted successfully." },
+                  },
+                },
+              },
+            },
+          },
+          '404': { description: 'File not found' },
+          '401': { description: 'Unauthorized' },
+          '403': { description: 'Forbidden: Manager or Admin role required' },
+        },
+      },
+    },
   },
 };
+
 
 const customCss = `
   .swagger-ui .topbar {

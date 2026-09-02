@@ -29,6 +29,7 @@ describe('Indian Store Backend API Suite', () => {
       expect(res.body.paths['/api/v1/orders']).toBeDefined();
       expect(res.body.paths['/api/v1/payments/create-intent']).toBeDefined();
       expect(res.body.paths['/api/v1/reports/sales-revenue']).toBeDefined();
+      expect(res.body.paths['/api/v1/upload']).toBeDefined();
     });
 
     it('GET /docs - redirects to /api-docs', async () => {

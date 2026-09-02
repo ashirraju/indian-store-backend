@@ -32,6 +32,9 @@ COPY --from=builder /app/dist ./dist
 # Copy database schema/seeds for migration runner if needed
 COPY src/database/schema.sql ./dist/database/schema.sql
 
+# Create uploads directory and set permissions for node user
+RUN mkdir -p /app/uploads && chown -R node:node /app/uploads
+
 # Non-root user for security
 USER node
 

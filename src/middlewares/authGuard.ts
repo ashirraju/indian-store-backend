@@ -38,14 +38,15 @@ export function authGuard(req: Request, res: Response, next: NextFunction) {
   // 1. Dev Bypass Mode for rapid local development & testing without requiring live Keycloak
   if (keycloakConfig.devAuthBypass) {
     let decodedToken: any = null;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
-      if (token && token !== 'null' && token !== 'undefined' && token !== 'dev-token') {
-        try {
-          decodedToken = jwt.decode(token);
-        } catch {
-          // Ignore decode errors in dev mode
-        }
+    const tokenCandidate =
+      (authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null) ||
+      (rawRoleHeader && rawRoleHeader.startsWith('ey') ? rawRoleHeader : null);
+
+    if (tokenCandidate && tokenCandidate !== 'null' && tokenCandidate !== 'undefined' && tokenCandidate !== 'dev-token') {
+      try {
+        decodedToken = jwt.decode(tokenCandidate);
+      } catch {
+        // Ignore decode errors in dev mode
       }
     }
 

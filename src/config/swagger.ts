@@ -958,7 +958,108 @@ export const swaggerDocument = {
         },
       },
     },
+    '/api/v1/products/search': {
+      get: {
+        tags: ['Products'],
+        summary: 'Full-Text Product Search with Relevance Ranking',
+        description: 'Search products by keyword (matches name, SKU, description, category, tags, and origin). Returns matches sorted by keyword relevance (exact/prefix matches first).',
+        parameters: [
+          { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Search term (e.g. "rice", "atta", "oil", "amul")' },
+          { name: 'category', in: 'query', schema: { type: 'string' }, description: 'Category slug or UUID' },
+          { name: 'subCategory', in: 'query', schema: { type: 'string' }, description: 'Sub-category filter' },
+          { name: 'minPrice', in: 'query', schema: { type: 'number' }, description: 'Minimum price in INR' },
+          { name: 'maxPrice', in: 'query', schema: { type: 'number' }, description: 'Maximum price in INR' },
+          { name: 'inStock', in: 'query', schema: { type: 'boolean' }, description: 'Filter only in-stock items' },
+          { name: 'sort', in: 'query', schema: { type: 'string', enum: ['relevance', 'price-asc', 'price-desc', 'rating', 'newest'] }, description: 'Sort criteria' },
+          { name: 'page', in: 'query', schema: { type: 'integer', default: 1 }, description: 'Page number' },
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 20 }, description: 'Items per page' },
+        ],
+        responses: {
+          '200': {
+            description: 'Search results matching query',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    query: { type: 'string', example: 'rice' },
+                    totalCount: { type: 'integer', example: 4 },
+                    page: { type: 'integer', example: 1 },
+                    limit: { type: 'integer', example: 20 },
+                    totalPages: { type: 'integer', example: 1 },
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/Product' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/v1/products/search/suggestions': {
+      get: {
+        tags: ['Products'],
+        summary: 'Instant Search Autocomplete / Typeahead Suggestions',
+        description: 'Lightweight, high-speed endpoint for navbar search bar typeahead dropdown. Returns top matching products and categories with prices and thumbnails.',
+        parameters: [
+          { name: 'q', in: 'query', required: true, schema: { type: 'string' }, description: 'Search prefix/keyword (min 2 chars, e.g. "ri")' },
+        ],
+        responses: {
+          '200': {
+            description: 'Instant autocomplete suggestions',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    query: { type: 'string', example: 'basmati' },
+                    totalSuggestions: { type: 'integer', example: 2 },
+                    suggestions: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string', example: 'p-101a' },
+                          name: { type: 'string', example: 'India Gate Nur Jahan Biryani Basmati Rice (5kg)' },
+                          slug: { type: 'string', example: 'india-gate-nur-jahan-biryani-basmati-rice-5kg' },
+                          price: { type: 'number', example: 999.00 },
+                          originalPrice: { type: 'number', example: 1200.00 },
+                          discountPercent: { type: 'integer', example: 17 },
+                          hasDiscount: { type: 'boolean', example: true },
+                          imageUrl: { type: 'string', example: 'https://images.unsplash.com/photo-1536304993881-ff6e9eefa2a6' },
+                          weight: { type: 'string', example: '5kg Bag' },
+                          isOutOfStock: { type: 'boolean', example: false },
+                          categoryName: { type: 'string', example: 'Atta, rice & grains' },
+                          categorySlug: { type: 'string', example: 'atta-rice-grains' },
+                        },
+                      },
+                    },
+                    categories: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string' },
+                          name: { type: 'string', example: 'Atta, rice & grains' },
+                          slug: { type: 'string', example: 'atta-rice-grains' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     '/api/v1/products': {
+
       get: {
         tags: ['Products'],
         summary: 'Search & Browse Product Catalog (with Pagination & Admin Filters)',

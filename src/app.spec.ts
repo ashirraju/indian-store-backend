@@ -131,6 +131,26 @@ describe('Indian Store Backend API Suite', () => {
       expect(res.body.totalPages).toBeDefined();
     });
 
+    it('GET /api/v1/products/search - searches products by keyword', async () => {
+      const res = await request(app).get('/api/v1/products/search?q=basmati');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.query).toBe('basmati');
+      expect(res.body.data.length).toBeGreaterThan(0);
+      expect(res.body.data[0].name).toMatch(/basmati/i);
+    });
+
+    it('GET /api/v1/products/search/suggestions - returns autocomplete suggestions', async () => {
+      const res = await request(app).get('/api/v1/products/search/suggestions?q=bas');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.query).toBe('bas');
+      expect(res.body.suggestions).toBeDefined();
+      expect(res.body.suggestions.length).toBeGreaterThan(0);
+      expect(res.body.suggestions[0].name).toBeDefined();
+      expect(res.body.suggestions[0].price).toBeDefined();
+    });
+
     it('PATCH /api/v1/products/:id/stock - updates stock with inventory log', async () => {
       const res = await request(app)
         .patch('/api/v1/products/p-101a/stock')

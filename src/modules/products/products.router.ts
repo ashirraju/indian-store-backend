@@ -297,11 +297,267 @@ productsRouter.get('/', async (req: Request, res: Response) => {
 });
 
 // ==========================================
+// 2. PRODUCT SEARCH & AUTOCOMPLETE SUGGESTIONS
+// ==========================================
+
+// GET /api/v1/products/search/suggestions - Instant typeahead suggestions for search bar dropdown
+productsRouter.get('/search/suggestions', async (req: Request, res: Response) => {
+  try {
+    const rawQuery = (req.query.q || req.query.search || req.query.query || '') as string;
+    const q = rawQuery.trim();
+
+    if (!q || q.length < 2) {
+      return res.json({
+        success: true,
+        query: q,
+        suggestions: [],
+        categories: [],
+      });
+    }
+
+    const searchPattern = `%${q}%`;
+
+    // 1. Matched products (searches product name, SKU, category, sub-category, and tags)
+    const productSql = `
+      SELECT 
+        p.id, p.name, p.slug, p.price, p.original_price, p.image_url, p.weight, p.stock, p.low_stock_threshold,
+        c.name AS category_name, c.slug AS category_slug,
+        sc.name AS sub_category_name, sc.slug AS sub_category_slug
+      FROM products p
+      LEFT JOIN categories c ON p.category = c.id
+      LEFT JOIN sub_categories sc ON p.sub_category = sc.id
+      WHERE (
+        p.name ILIKE $1 OR 
+        p.sku ILIKE $1 OR 
+        c.name ILIKE $1 OR 
+        c.slug ILIKE $1 OR 
+        sc.name ILIKE $1 OR 
+        sc.slug ILIKE $1 OR 
+        $1 = ANY(p.tags)
+      )
+      ORDER BY 
+        CASE 
+          WHEN p.name ILIKE $2 THEN 0 
+          WHEN p.name ILIKE $1 THEN 1 
+          WHEN sc.name ILIKE $1 THEN 2
+          WHEN c.name ILIKE $1 THEN 3
+          ELSE 4 
+        END,
+        p.is_bestseller DESC,
+        p.rating DESC
+      LIMIT 8
+    `;
+
+    // 2. Matched categories (limit 3)
+    const categorySql = `
+      SELECT id, name, slug
+      FROM categories
+      WHERE name ILIKE $1 OR slug ILIKE $1
+      ORDER BY display_order ASC
+      LIMIT 3
+    `;
+
+    // 3. Matched sub-categories (limit 3, includes parent category context)
+    const subCategorySql = `
+      SELECT 
+        sc.id, sc.name, sc.slug,
+        c.id AS category_id, c.name AS category_name, c.slug AS category_slug
+      FROM sub_categories sc
+      JOIN categories c ON sc.category_id = c.id
+      WHERE sc.name ILIKE $1 OR sc.slug ILIKE $1
+      ORDER BY sc.display_order ASC
+      LIMIT 3
+    `;
+
+    const [productRes, categoryRes, subCategoryRes] = await Promise.all([
+      query(productSql, [searchPattern, `${q}%`]),
+      query(categorySql, [searchPattern]),
+      query(subCategorySql, [searchPattern]),
+    ]);
+
+    const suggestions = productRes.rows.map((p) => {
+      const originalPrice = p.original_price != null ? Number(p.original_price) : Number(p.price);
+      const sellingPrice = Number(p.price);
+      const hasDiscount = originalPrice > sellingPrice;
+      const discountPercent = hasDiscount ? Math.round(((originalPrice - sellingPrice) / originalPrice) * 100) : 0;
+      const stock = Number(p.stock || 0);
+
+      return {
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        price: sellingPrice,
+        originalPrice: originalPrice,
+        discountPercent,
+        hasDiscount,
+        imageUrl: p.image_url,
+        weight: p.weight,
+        isOutOfStock: stock <= 0,
+        categoryName: p.category_name,
+        categorySlug: p.category_slug,
+        subCategoryName: p.sub_category_name,
+        subCategorySlug: p.sub_category_slug,
+      };
+    });
+
+    res.json({
+      success: true,
+      query: q,
+      totalSuggestions: suggestions.length,
+      suggestions,
+      categories: categoryRes.rows,
+      subCategories: subCategoryRes.rows,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: 'SUGGESTIONS_FAILED', message: error.message });
+  }
+});
+
+// GET /api/v1/products/search - Full catalog search with relevance sorting and filters
+productsRouter.get('/search', async (req: Request, res: Response) => {
+  try {
+    const rawQuery = (req.query.q || req.query.search || req.query.query || '') as string;
+    const q = rawQuery.trim();
+    const { category, subCategory, minPrice, maxPrice, organic, inStock, sort, page, limit } = req.query;
+
+    const params: any[] = [];
+    let filterSql = ' WHERE 1=1';
+
+    let qIdx = 0;
+    if (q) {
+      params.push(`%${q}%`);
+      qIdx = params.length;
+
+      filterSql += ` AND (
+        p.name ILIKE $${qIdx} OR 
+        p.sku ILIKE $${qIdx} OR 
+        p.description ILIKE $${qIdx} OR 
+        p.origin_region ILIKE $${qIdx} OR 
+        c.name ILIKE $${qIdx} OR 
+        c.slug ILIKE $${qIdx} OR 
+        sc.name ILIKE $${qIdx} OR 
+        sc.slug ILIKE $${qIdx} OR 
+        $${qIdx} = ANY(p.tags)
+      )`;
+    }
+
+    if (category && category !== 'All' && category !== 'All Categories') {
+      params.push(category);
+      filterSql += ` AND (p.category::text = $${params.length} OR c.slug ILIKE $${params.length} OR c.name ILIKE $${params.length})`;
+    }
+
+    if (subCategory && subCategory !== 'All' && subCategory !== 'All Sub-Categories') {
+      params.push(subCategory);
+      filterSql += ` AND (p.sub_category::text = $${params.length} OR sc.slug ILIKE $${params.length} OR sc.name ILIKE $${params.length})`;
+    }
+
+    if (minPrice != null && minPrice !== '') {
+      params.push(Number(minPrice));
+      filterSql += ` AND p.price >= $${params.length}`;
+    }
+
+    if (maxPrice != null && maxPrice !== '') {
+      params.push(Number(maxPrice));
+      filterSql += ` AND p.price <= $${params.length}`;
+    }
+
+    if (organic === 'true') {
+      filterSql += ' AND p.is_organic = true';
+    }
+
+    if (inStock === 'true') {
+      filterSql += ' AND p.stock > 0';
+    }
+
+    // Total count query with exact filter params
+    const countSql = `
+      SELECT COUNT(*) AS total
+      FROM products p
+      LEFT JOIN categories c ON p.category = c.id
+      LEFT JOIN sub_categories sc ON p.sub_category = sc.id
+      ${filterSql}
+    `;
+    const countRes = await query(countSql, [...params]);
+    const totalCount = Number(countRes.rows[0].total);
+
+    // Main query
+    let sql = `
+      SELECT 
+        p.id, p.sku, p.name, p.slug, p.category, p.sub_category,
+        c.name AS category_name, c.slug AS category_slug,
+        sc.name AS sub_category_name, sc.slug AS sub_category_slug,
+        p.price, p.original_price, p.discount_type, p.discount_value,
+        p.rating, p.reviews_count, p.image_url,
+        p.description, p.weight, p.stock, p.low_stock_threshold,
+        p.is_organic, p.is_bestseller, p.origin_region, p.tags,
+        p.created_at, p.updated_at
+      FROM products p
+      LEFT JOIN categories c ON p.category = c.id
+      LEFT JOIN sub_categories sc ON p.sub_category = sc.id
+      ${filterSql}
+    `;
+
+    // Relevance and Sorting
+    if (sort === 'price-asc') {
+      sql += ' ORDER BY p.price ASC';
+    } else if (sort === 'price-desc') {
+      sql += ' ORDER BY p.price DESC';
+    } else if (sort === 'rating') {
+      sql += ' ORDER BY p.rating DESC, p.reviews_count DESC';
+    } else if (sort === 'newest') {
+      sql += ' ORDER BY p.created_at DESC';
+    } else if (q) {
+      params.push(`${q}%`);
+      const prefixIdx = params.length;
+      sql += ` ORDER BY 
+        CASE 
+          WHEN p.name ILIKE $${prefixIdx} THEN 0 
+          WHEN p.name ILIKE $${qIdx} THEN 1 
+          WHEN sc.name ILIKE $${qIdx} OR sc.slug ILIKE $${qIdx} THEN 2
+          WHEN c.name ILIKE $${qIdx} OR c.slug ILIKE $${qIdx} THEN 3
+          ELSE 4 
+        END,
+        p.is_bestseller DESC,
+        p.rating DESC,
+        p.reviews_count DESC`;
+    } else {
+      sql += ' ORDER BY p.is_bestseller DESC, p.rating DESC, p.created_at DESC';
+    }
+
+
+
+    // Pagination
+    const pageNum = page ? Math.max(1, Number(page)) : 1;
+    const limitNum = limit ? Math.min(100, Math.max(1, Number(limit))) : 20;
+    const offset = (pageNum - 1) * limitNum;
+
+    params.push(limitNum, offset);
+    sql += ` LIMIT $${params.length - 1} OFFSET $${params.length}`;
+
+    const result = await query(sql, params);
+    const formatted = result.rows.map(formatProductResponse);
+
+    res.json({
+      success: true,
+      query: q,
+      totalCount,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(totalCount / limitNum),
+      data: formatted,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: 'SEARCH_FAILED', message: error.message });
+  }
+});
+
+// ==========================================
 // 3. PRODUCT CRUD & ADMIN OPERATIONS
 // ==========================================
 
 // GET /api/v1/products/:id - Single product details
 productsRouter.get('/:id', async (req: Request, res: Response) => {
+
   try {
     const { id } = req.params;
     const sql = `

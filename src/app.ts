@@ -22,6 +22,9 @@ dotenv.config();
 
 export const app: Express = express();
 
+// Trust reverse proxy (Traefik) so express-rate-limit correctly resolves client IP
+app.set('trust proxy', 1);
+
 // Security Middlewares (configured to allow Swagger UI scripts/styles)
 app.use(
   helmet({

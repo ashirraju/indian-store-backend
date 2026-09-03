@@ -51,15 +51,19 @@ try {
 }
 
 /**
- * Explicitly connect to Redis on server startup
+ * Explicitly connect to Redis on server startup and test connectivity
  */
 export async function connectRedis(): Promise<boolean> {
   if (!redisClient) return false;
   try {
-    await redisClient.connect();
-    isRedisConnected = true;
-    return true;
-  } catch {
+    if (redisClient.status === 'wait') {
+      await redisClient.connect();
+    }
+    const pong = await redisClient.ping();
+    isRedisConnected = pong === 'PONG';
+    return isRedisConnected;
+  } catch (err: any) {
+    console.warn('⚠️ Redis ping failed:', err.message);
     isRedisConnected = false;
     return false;
   }
@@ -70,7 +74,7 @@ export function getRedisClient(): Redis | null {
 }
 
 export function isRedisAvailable(): boolean {
-  return Boolean(redisClient && isRedisConnected);
+  return Boolean(redisClient && (isRedisConnected || redisClient.status === 'ready'));
 }
 
 /**

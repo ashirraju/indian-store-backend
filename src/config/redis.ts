@@ -8,7 +8,6 @@ const REDIS_PORT = Number(process.env.REDIS_PORT || 6379);
 const REDIS_PASSWORD = process.env.REDIS_PASSWORD || undefined;
 
 let redisClient: Redis | null = null;
-let isRedisConnected = false;
 
 try {
   redisClient = new Redis({
@@ -22,118 +21,37 @@ try {
     },
   });
 
-  redisClient.on('ready', () => {
-    isRedisConnected = true;
-  });
-
   redisClient.on('connect', () => {
-    isRedisConnected = true;
+    console.log(`✅ Redis connected at ${REDIS_HOST}:${REDIS_PORT}`);
   });
 
   redisClient.on('error', (err) => {
-    if (isRedisConnected) {
+    // Suppress unhandled crash errors if Redis temporarily goes down
+    if (!err.message.includes('ECONNREFUSED')) {
       console.warn('⚠️ Redis error:', err.message);
     }
-    isRedisConnected = false;
-  });
-
-  redisClient.on('close', () => {
-    isRedisConnected = false;
   });
 } catch (err: any) {
   console.warn('⚠️ Redis initialization bypassed:', err.message);
   redisClient = null;
-  isRedisConnected = false;
 }
 
 /**
- * Wait for Redis readiness on server boot
+ * Check if Redis is reachable on server startup
  */
 export async function connectRedis(): Promise<boolean> {
   if (!redisClient) return false;
-  if (redisClient.status === 'ready') {
-    isRedisConnected = true;
-    return true;
+  try {
+    const pong = await Promise.race([
+      redisClient.ping(),
+      new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000)),
+    ]);
+    return pong === 'PONG';
+  } catch {
+    return false;
   }
-
-  return new Promise((resolve) => {
-    if (!redisClient || redisClient.status === 'ready') {
-      isRedisConnected = Boolean(redisClient && redisClient.status === 'ready');
-      return resolve(isRedisConnected);
-    }
-
-    const onReady = () => {
-      cleanup();
-      isRedisConnected = true;
-      resolve(true);
-    };
-
-    const onError = () => {
-      cleanup();
-      isRedisConnected = false;
-      resolve(false);
-    };
-
-    const timer = setTimeout(() => {
-      cleanup();
-      isRedisConnected = Boolean(redisClient && redisClient.status === 'ready');
-      resolve(isRedisConnected);
-    }, 2000);
-
-    function cleanup() {
-      clearTimeout(timer);
-      redisClient?.off('ready', onReady);
-      redisClient?.off('error', onError);
-    }
-
-    redisClient.once('ready', onReady);
-    redisClient.once('error', onError);
-  });
 }
 
 export function getRedisClient(): Redis | null {
   return redisClient;
-}
-
-export function isRedisAvailable(): boolean {
-  return Boolean(redisClient && (isRedisConnected || redisClient.status === 'ready'));
-}
-
-/**
- * Fetch raw string data from Redis. Returns null if key doesn't exist or on any Redis failure.
- */
-export async function getCache(key: string): Promise<string | null> {
-  if (!isRedisAvailable() || !redisClient) return null;
-  try {
-    return await redisClient.get(key);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Save string data to Redis with TTL in seconds. Fails gracefully if Redis is unavailable.
- */
-export async function setCache(key: string, value: string, ttlSeconds: number = 60): Promise<void> {
-  if (!isRedisAvailable() || !redisClient) return;
-  try {
-    await redisClient.setex(key, ttlSeconds, value);
-  } catch {
-    // Graceful fallback - continue without caching
-  }
-}
-
-/**
- * Invalidate all keys matching a pattern (e.g., 'cache:api:/api/v1/products*')
- */
-export async function clearCachePattern(pattern: string): Promise<void> {
-  if (!isRedisAvailable() || !redisClient) return;
-  try {
-    const keys = await redisClient.keys(pattern);
-    if (keys.length > 0) {
-      await redisClient.del(...keys);
-    }
-  } catch {
-    // Graceful fallback
-  }
 }

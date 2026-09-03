@@ -1,6 +1,7 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 
@@ -89,6 +90,14 @@ app.use(cors(corsOptions));
 
 // 2. Explicit Preflight OPTIONS handler with identical corsOptions
 app.options('*', cors(corsOptions));
+
+// 3. Response compression (GZIP / Deflate) for JSON, HTML, and text payloads (>1KB)
+app.use(
+  compression({
+    threshold: 1024,
+  })
+);
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -96,17 +105,24 @@ app.use(express.urlencoded({ extended: true }));
 setupSwagger(app);
 
 
-// Global Rate Limiter (Prevent brute force & abuse)
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Limit each IP to 500 requests per window
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: 'TOO_MANY_REQUESTS', message: 'Rate limit exceeded. Please try again later.' }
-});
-app.use(limiter);
+// Static file serving for uploaded media assets (with 30-day immutable caching for CDN / Browser)
+// MUST be mounted BEFORE the rate limiter so images never deplete client API rate limits
+const uploadsDirectory = path.resolve(process.env.UPLOADS_PATH || './uploads');
+app.use(
+  '/uploads',
+  (_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+  },
+  express.static(uploadsDirectory, {
+    maxAge: '30d',
+    immutable: true,
+    index: false,
+  })
+);
 
-// Health Check Endpoint
+// Health Check Endpoints (Exempt from rate limiting for Docker/Traefik probes)
 app.get('/', (_req: Request, res: Response) => {
   res.json({
     status: 'UP',
@@ -125,6 +141,17 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
+// API Rate Limiter (Applied strictly to /api routes to prevent abuse, while exempting tests)
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // Limit each IP to 500 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'TOO_MANY_REQUESTS', message: 'Rate limit exceeded. Please try again later.' },
+  skip: () => process.env.NODE_ENV === 'test',
+});
+app.use('/api', limiter);
+
 // Mount Domain Modules
 app.use('/api/v1/notifications', notificationsRouter);
 app.use('/api/v1/storefront', storefrontRouter);
@@ -138,22 +165,6 @@ app.use('/api/v1/payments', paymentsRouter);
 app.use('/api/v1/reports', reportsRouter);
 app.use('/api/v1/upload', uploadRouter);
 app.use('/api/v1/uploads', uploadRouter);
-
-// Static file serving for uploaded media assets (with 30-day immutable caching for CDN / Browser)
-const uploadsDirectory = path.resolve(process.env.UPLOADS_PATH || './uploads');
-app.use(
-  '/uploads',
-  (_req: Request, res: Response, next: NextFunction) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    next();
-  },
-  express.static(uploadsDirectory, {
-    maxAge: '30d',
-    immutable: true,
-    index: false,
-  })
-);
 
 // 404 Handler
 app.use((req: Request, res: Response) => {

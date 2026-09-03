@@ -2,8 +2,12 @@ import { Router, Request, Response } from 'express';
 import { query } from '../../config/database.js';
 import { authGuard } from '../../middlewares/authGuard.js';
 import { roleGuard } from '../../middlewares/roleGuard.js';
+import { cacheResponse, invalidateCategoriesCache, invalidateOnMutation } from '../../middlewares/cache.js';
 
 export const categoriesRouter = Router();
+
+// Automatically invalidate categories and products cache on any mutation
+categoriesRouter.use(invalidateOnMutation(invalidateCategoriesCache));
 
 // Helper to generate URL-safe slug from name
 function generateSlug(text: string): string {
@@ -20,7 +24,7 @@ function generateSlug(text: string): string {
 // ==========================================
 
 // GET /api/v1/categories - List all categories with nested sub-categories and product counts
-categoriesRouter.get('/', async (_req: Request, res: Response) => {
+categoriesRouter.get('/', cacheResponse(120), async (_req: Request, res: Response) => {
   try {
     const catSql = `
       SELECT 
@@ -80,8 +84,8 @@ categoriesRouter.get('/', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/v1/categories/:id - Single category with its sub-categories
-categoriesRouter.get('/:id', async (req: Request, res: Response) => {
+// GET /api/v1/categories/:id - Single category by ID or slug with sub-categories
+categoriesRouter.get('/:id', cacheResponse(120), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -258,8 +262,8 @@ categoriesRouter.delete('/:id', authGuard, roleGuard('Manager', 'Admin'), async 
 // 2. SUB-CATEGORIES CRUD ENDPOINTS
 // ==========================================
 
-// GET /api/v1/sub-categories - List all sub-categories with parent category details
-categoriesRouter.get('/sub-categories/all', async (_req: Request, res: Response) => {
+// GET /api/v1/categories/sub-categories/all - List all sub-categories across the catalog
+categoriesRouter.get('/sub-categories/all', cacheResponse(120), async (_req: Request, res: Response) => {
   try {
     const sql = `
       SELECT 
@@ -294,8 +298,8 @@ categoriesRouter.get('/sub-categories/all', async (_req: Request, res: Response)
   }
 });
 
-// GET /api/v1/categories/:categoryId/sub-categories - List subcategories of a specific category
-categoriesRouter.get('/:categoryId/sub-categories', async (req: Request, res: Response) => {
+// GET /api/v1/categories/:categoryId/sub-categories - List sub-categories under specific category
+categoriesRouter.get('/:categoryId/sub-categories', cacheResponse(120), async (req: Request, res: Response) => {
   try {
     const { categoryId } = req.params;
 

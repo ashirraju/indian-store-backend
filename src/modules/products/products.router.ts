@@ -2,8 +2,12 @@ import { Router, Request, Response } from 'express';
 import { query, getClient } from '../../config/database.js';
 import { authGuard } from '../../middlewares/authGuard.js';
 import { roleGuard } from '../../middlewares/roleGuard.js';
+import { cacheResponse, invalidateProductsCache, invalidateOnMutation } from '../../middlewares/cache.js';
 
 export const productsRouter = Router();
+
+// Automatically invalidate products and storefront cache on any successful mutation
+productsRouter.use(invalidateOnMutation(invalidateProductsCache));
 
 // Helper to compute discount fields and stock status for Frontend presentation
 function formatProductResponse(p: any) {
@@ -160,7 +164,7 @@ productsRouter.get('/admin/summary', authGuard, roleGuard('Operations', 'Manager
 // ==========================================
 
 // GET /api/v1/products - Browse catalog with filters, search, sorting & pagination
-productsRouter.get('/', async (req: Request, res: Response) => {
+productsRouter.get('/', cacheResponse(60), async (req: Request, res: Response) => {
   try {
     const {
       category,
@@ -301,7 +305,7 @@ productsRouter.get('/', async (req: Request, res: Response) => {
 // ==========================================
 
 // GET /api/v1/products/search/suggestions - Instant typeahead suggestions for search bar dropdown
-productsRouter.get('/search/suggestions', async (req: Request, res: Response) => {
+productsRouter.get('/search/suggestions', cacheResponse(120), async (req: Request, res: Response) => {
   try {
     const rawQuery = (req.query.q || req.query.search || req.query.query || '') as string;
     const q = rawQuery.trim();
@@ -414,7 +418,7 @@ productsRouter.get('/search/suggestions', async (req: Request, res: Response) =>
 });
 
 // GET /api/v1/products/search - Full catalog search with relevance sorting and filters
-productsRouter.get('/search', async (req: Request, res: Response) => {
+productsRouter.get('/search', cacheResponse(60), async (req: Request, res: Response) => {
   try {
     const rawQuery = (req.query.q || req.query.search || req.query.query || '') as string;
     const q = rawQuery.trim();
@@ -556,7 +560,7 @@ productsRouter.get('/search', async (req: Request, res: Response) => {
 // ==========================================
 
 // GET /api/v1/products/:id - Single product details
-productsRouter.get('/:id', async (req: Request, res: Response) => {
+productsRouter.get('/:id', cacheResponse(60), async (req: Request, res: Response) => {
 
   try {
     const { id } = req.params;

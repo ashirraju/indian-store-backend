@@ -2,8 +2,12 @@ import { Router, Request, Response } from 'express';
 import { query } from '../../config/database.js';
 import { authGuard } from '../../middlewares/authGuard.js';
 import { roleGuard } from '../../middlewares/roleGuard.js';
+import { cacheResponse, invalidateStorefrontCache, invalidateOnMutation } from '../../middlewares/cache.js';
 
 export const storefrontRouter = Router();
+
+// Automatically invalidate storefront and banners cache on any mutation
+storefrontRouter.use(invalidateOnMutation(invalidateStorefrontCache));
 
 // Helper to format storefront configuration response
 function formatStorefrontConfig(row: any) {
@@ -66,7 +70,7 @@ function formatBanner(b: any) {
 // ==========================================
 
 // GET /api/v1/storefront - Full aggregate storefront data (store config, active banners, announcements)
-storefrontRouter.get('/', async (_req: Request, res: Response) => {
+storefrontRouter.get('/', cacheResponse(60), async (_req: Request, res: Response) => {
   try {
     // 1. Fetch Storefront Configuration
     const configRes = await query('SELECT * FROM storefront_config WHERE id = $1 LIMIT 1', ['default']);
@@ -111,7 +115,7 @@ storefrontRouter.get('/', async (_req: Request, res: Response) => {
 // ==========================================
 
 // GET /api/v1/storefront/config or /api/v1/storefront/banner-config - Current top bar & store settings
-storefrontRouter.get('/config', async (_req: Request, res: Response) => {
+storefrontRouter.get('/config', cacheResponse(60), async (_req: Request, res: Response) => {
   try {
     const configRes = await query('SELECT * FROM storefront_config WHERE id = $1 LIMIT 1', ['default']);
     res.json({
@@ -124,7 +128,7 @@ storefrontRouter.get('/config', async (_req: Request, res: Response) => {
 });
 
 // Alias for frontend matching store.bannerConfig()
-storefrontRouter.get('/banner-config', async (_req: Request, res: Response) => {
+storefrontRouter.get('/banner-config', cacheResponse(60), async (_req: Request, res: Response) => {
   try {
     const configRes = await query('SELECT * FROM storefront_config WHERE id = $1 LIMIT 1', ['default']);
     const formatted = formatStorefrontConfig(configRes.rows[0]);
@@ -232,7 +236,7 @@ storefrontRouter.patch('/config', authGuard, roleGuard('Manager', 'Admin'), hand
 // ==========================================
 
 // GET /api/v1/storefront/banners - List all banners (Public sees active only, Admin can request ?all=true)
-storefrontRouter.get('/banners', async (req: Request, res: Response) => {
+storefrontRouter.get('/banners', cacheResponse(60), async (req: Request, res: Response) => {
   try {
     const { placement, all } = req.query;
 
@@ -262,7 +266,7 @@ storefrontRouter.get('/banners', async (req: Request, res: Response) => {
 });
 
 // GET /api/v1/storefront/banners/:id - Get single banner details
-storefrontRouter.get('/banners/:id', async (req: Request, res: Response) => {
+storefrontRouter.get('/banners/:id', cacheResponse(60), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const result = await query('SELECT * FROM promotional_banners WHERE id::text = $1 LIMIT 1', [id]);

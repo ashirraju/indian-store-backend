@@ -15,28 +15,24 @@ try {
     host: REDIS_HOST,
     port: REDIS_PORT,
     password: REDIS_PASSWORD,
-    lazyConnect: true,
-    maxRetriesPerRequest: 1,
+    connectTimeout: 5000,
+    maxRetriesPerRequest: 2,
     retryStrategy(times) {
-      // Reconnect with capped backoff
-      return Math.min(times * 150, 3000);
+      return Math.min(times * 200, 3000);
     },
-    connectTimeout: 2000,
-    enableOfflineQueue: false, // Don't queue commands in memory indefinitely when Redis is down
-  });
-
-  redisClient.on('connect', () => {
-    isRedisConnected = true;
   });
 
   redisClient.on('ready', () => {
     isRedisConnected = true;
   });
 
+  redisClient.on('connect', () => {
+    isRedisConnected = true;
+  });
+
   redisClient.on('error', (err) => {
-    // Only warn on active disconnection to prevent spamming when Redis is deliberately omitted
     if (isRedisConnected) {
-      console.warn('⚠️ Redis connection error:', err.message);
+      console.warn('⚠️ Redis error:', err.message);
     }
     isRedisConnected = false;
   });
@@ -51,22 +47,48 @@ try {
 }
 
 /**
- * Explicitly connect to Redis on server startup and test connectivity
+ * Wait for Redis readiness on server boot
  */
 export async function connectRedis(): Promise<boolean> {
   if (!redisClient) return false;
-  try {
-    if (redisClient.status === 'wait') {
-      await redisClient.connect();
-    }
-    const pong = await redisClient.ping();
-    isRedisConnected = pong === 'PONG';
-    return isRedisConnected;
-  } catch (err: any) {
-    console.warn('⚠️ Redis ping failed:', err.message);
-    isRedisConnected = false;
-    return false;
+  if (redisClient.status === 'ready') {
+    isRedisConnected = true;
+    return true;
   }
+
+  return new Promise((resolve) => {
+    if (!redisClient || redisClient.status === 'ready') {
+      isRedisConnected = Boolean(redisClient && redisClient.status === 'ready');
+      return resolve(isRedisConnected);
+    }
+
+    const onReady = () => {
+      cleanup();
+      isRedisConnected = true;
+      resolve(true);
+    };
+
+    const onError = () => {
+      cleanup();
+      isRedisConnected = false;
+      resolve(false);
+    };
+
+    const timer = setTimeout(() => {
+      cleanup();
+      isRedisConnected = Boolean(redisClient && redisClient.status === 'ready');
+      resolve(isRedisConnected);
+    }, 2000);
+
+    function cleanup() {
+      clearTimeout(timer);
+      redisClient?.off('ready', onReady);
+      redisClient?.off('error', onError);
+    }
+
+    redisClient.once('ready', onReady);
+    redisClient.once('error', onError);
+  });
 }
 
 export function getRedisClient(): Redis | null {

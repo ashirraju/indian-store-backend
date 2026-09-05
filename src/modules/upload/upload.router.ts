@@ -6,6 +6,11 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { authGuard } from '../../middlewares/authGuard.js';
 import { roleGuard } from '../../middlewares/roleGuard.js';
+import {
+  uploadToStratus,
+  deleteFromStratus,
+  isStratusEnabled,
+} from '../../services/stratusStorage.js';
 
 export const uploadRouter: Router = Router();
 
@@ -64,7 +69,7 @@ function getBaseUrl(req: Request): string {
 }
 
 // Process buffer with sharp into optimized webp
-async function processImageToWebP(buffer: Buffer) {
+async function processImageToWebP(buffer: Buffer, req?: Request) {
   const image = sharp(buffer);
   const metadata = await image.metadata();
 
@@ -83,12 +88,28 @@ async function processImageToWebP(buffer: Buffer) {
 
   const randomHash = crypto.randomBytes(8).toString('hex');
   const filename = `img_${Date.now()}_${randomHash}.webp`;
-  const destinationPath = path.join(UPLOADS_DIR, filename);
 
-  await fs.promises.writeFile(destinationPath, processedBuffer);
+  let publicUrl: string;
+  let storageProvider: 'zoho_stratus' | 'local' = 'local';
+  let objectKey: string | undefined;
+
+  if (isStratusEnabled()) {
+    const stratusResult = await uploadToStratus(processedBuffer, filename, 'products');
+    publicUrl = stratusResult.publicUrl;
+    objectKey = stratusResult.objectKey;
+    storageProvider = 'zoho_stratus';
+  } else {
+    const destinationPath = path.join(UPLOADS_DIR, filename);
+    await fs.promises.writeFile(destinationPath, processedBuffer);
+    const baseUrl = req ? getBaseUrl(req) : '';
+    publicUrl = `${baseUrl}/uploads/${filename}`;
+  }
 
   return {
     filename,
+    url: publicUrl,
+    objectKey,
+    storageProvider,
     size: processedBuffer.length,
     originalSize: buffer.length,
     width: processedMeta.width,
@@ -156,17 +177,19 @@ uploadRouter.post(
         });
       }
 
-      const result = await processImageToWebP(uploadedFile.buffer);
-      const baseUrl = getBaseUrl(req);
-      const publicUrl = `${baseUrl}/uploads/${result.filename}`;
+      const result = await processImageToWebP(uploadedFile.buffer, req);
 
       return res.status(201).json({
         success: true,
-        message: 'Image uploaded and optimized to WebP successfully.',
+        message: isStratusEnabled()
+          ? 'Image uploaded and optimized to Zoho Stratus successfully.'
+          : 'Image uploaded and optimized to WebP successfully.',
         data: {
-          url: publicUrl,
-          imageUrl: publicUrl,
+          url: result.url,
+          imageUrl: result.url,
           filename: result.filename,
+          objectKey: result.objectKey,
+          storageProvider: result.storageProvider,
           format: result.format,
           size: result.size,
           originalSize: result.originalSize,
@@ -208,14 +231,15 @@ uploadRouter.post(
         });
       }
 
-      const baseUrl = getBaseUrl(req);
       const results = await Promise.all(
         files.map(async (f) => {
-          const processed = await processImageToWebP(f.buffer);
+          const processed = await processImageToWebP(f.buffer, req);
           return {
-            url: `${baseUrl}/uploads/${processed.filename}`,
-            imageUrl: `${baseUrl}/uploads/${processed.filename}`,
+            url: processed.url,
+            imageUrl: processed.url,
             filename: processed.filename,
+            objectKey: processed.objectKey,
+            storageProvider: processed.storageProvider,
             size: processed.size,
             format: processed.format,
           };
@@ -239,7 +263,7 @@ uploadRouter.post(
 
 /**
  * DELETE /api/v1/upload/:filename
- * Delete an uploaded image file
+ * Delete an uploaded image file (from Stratus or local disk)
  */
 uploadRouter.delete(
   '/:filename',
@@ -248,19 +272,27 @@ uploadRouter.delete(
   async (req: Request, res: Response) => {
     try {
       const { filename } = req.params;
-      // Prevent directory traversal attacks
       const sanitizedFilename = path.basename(filename);
-      const filePath = path.join(UPLOADS_DIR, sanitizedFilename);
 
-      if (!fs.existsSync(filePath)) {
+      let deletedFromStratus = false;
+      if (isStratusEnabled()) {
+        deletedFromStratus = await deleteFromStratus(`products/${sanitizedFilename}`);
+      }
+
+      const filePath = path.join(UPLOADS_DIR, sanitizedFilename);
+      let deletedFromLocal = false;
+      if (fs.existsSync(filePath)) {
+        await fs.promises.unlink(filePath);
+        deletedFromLocal = true;
+      }
+
+      if (!deletedFromStratus && !deletedFromLocal) {
         return res.status(404).json({
           success: false,
           error: 'FILE_NOT_FOUND',
-          message: `File '${sanitizedFilename}' not found in uploads directory.`,
+          message: `File '${sanitizedFilename}' not found in storage.`,
         });
       }
-
-      await fs.promises.unlink(filePath);
 
       return res.json({
         success: true,

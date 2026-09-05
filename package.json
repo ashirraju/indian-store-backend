@@ -32,6 +32,7 @@
     "sharp": "^0.35.4",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^10.0.0",
+    "zcatalyst-sdk-node": "^3.4.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

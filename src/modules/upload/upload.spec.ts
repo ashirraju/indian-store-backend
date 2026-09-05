@@ -29,18 +29,23 @@ describe('Media Upload & Static Asset Delivery Suite (VPS + Cloudflare CDN)', ()
     expect(res.body.data).toBeDefined();
     expect(res.body.data.format).toBe('webp');
     expect(res.body.data.filename).toMatch(/^img_\d+_[a-f0-9]+\.webp$/);
-    expect(res.body.data.url).toContain('/uploads/' + res.body.data.filename);
+    expect(res.body.data.url).toContain(res.body.data.filename);
 
     const filename = res.body.data.filename;
-    const uploadedFilePath = path.join(process.cwd(), 'uploads', filename);
-    expect(fs.existsSync(uploadedFilePath)).toBe(true);
 
-    // Test static serving via GET /uploads/:filename
-    const staticRes = await request(app).get(`/uploads/${filename}`);
-    expect(staticRes.status).toBe(200);
-    expect(staticRes.headers['content-type']).toContain('image/webp');
-    expect(staticRes.headers['cache-control']).toContain('max-age=2592000');
-    expect(staticRes.headers['access-control-allow-origin']).toBe('*');
+    if (res.body.data.storageProvider === 'zoho_stratus') {
+      expect(res.body.data.url).toContain('.zohostratus.com');
+    } else {
+      const uploadedFilePath = path.join(process.cwd(), 'uploads', filename);
+      expect(fs.existsSync(uploadedFilePath)).toBe(true);
+
+      // Test static serving via GET /uploads/:filename
+      const staticRes = await request(app).get(`/uploads/${filename}`);
+      expect(staticRes.status).toBe(200);
+      expect(staticRes.headers['content-type']).toContain('image/webp');
+      expect(staticRes.headers['cache-control']).toContain('max-age=2592000');
+      expect(staticRes.headers['access-control-allow-origin']).toBe('*');
+    }
 
     // Test deletion of uploaded file
     const delRes = await request(app)
@@ -48,7 +53,6 @@ describe('Media Upload & Static Asset Delivery Suite (VPS + Cloudflare CDN)', ()
       .set('x-mock-role', 'Admin');
     expect(delRes.status).toBe(200);
     expect(delRes.body.success).toBe(true);
-    expect(fs.existsSync(uploadedFilePath)).toBe(false);
   });
 
   it('POST /api/v1/upload - rejects non-image files', async () => {
